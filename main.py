@@ -217,15 +217,7 @@ def Generator(z, name='g'):
 			variable_summaries(G_h3)
 
 		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=BATCH_SIZE, name='Gen_conv4')
-		G_bn4 = BatchNormalization(G_conv4, name='Gen_bn4')
-		G_h4 = LeakyReLU(G_bn4)
-		with tf.name_scope('activation_4'):
-			variable_summaries(G_h4)
-
-		G_r4 = tf.reshape(G_h4, [-1, 32*32*4]) # -1 is for batch size
-
-		# This seems wrong... we're sending in the output of a ReLU into a tanh???!?!?
-
+		G_r4 = tf.reshape(G_conv4, [-1, 32*32*4]) # -1 is for batch size
 		tanh_layer = tf.nn.tanh(G_r4)
 		with tf.name_scope('tanh'):
 			variable_summaries(tanh_layer)
