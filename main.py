@@ -16,13 +16,13 @@ import time
 ITERATIONS = 100
 BATCH_SIZE = 64
 EPOCHS = 10000
-IMAGE_SIZE = 64*64*4
+IMAGE_SIZE = 32*32*4
 
 image_filenames = []
 
 def get_image_filenames():
-	s = commands.getstatusoutput('ls data')
-	filenames = ['data/' + string for string in s[1].split()]
+	s = commands.getstatusoutput('ls small_data')
+	filenames = ['small_data/' + string for string in s[1].split()]
 	shuffle(filenames)
 	return filenames
 image_filenames = get_image_filenames() # Load all image filenames into memory
@@ -50,7 +50,7 @@ def get_next_image_batch(batch_size):
 				shuffle(image_filenames)
 			# Note that we don't store all pixels in memory bec of memory constraints
 			pix = get_pixels_for_filename(image_filenames[curr_image_idx])
-			if pix.shape != (4096, 4):
+			if pix.shape != (1024, 4):
 				print('Invalid pixels shape for file ' + image_filenames[curr_image_idx] + ': ' + str(pix.shape))
 				# Skip this image
 				curr_image_idx += 1
@@ -87,7 +87,7 @@ def plot(samples, D_loss, G_loss, epoch, total):
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		ax.set_aspect('equal')
-		plt.imshow(sample.reshape(64, 64, 4))
+		plt.imshow(sample.reshape(32, 32, 4))
 
 	plt.savefig('./output/' + str(epoch + 1) + '.png')
 	print('./output/' + str(epoch + 1) + '.png')
@@ -149,20 +149,7 @@ def Dense(input, output_dim, stddev=0.02, name='dense'):
 		return tf.matmul(input, W) + b
 
 def BatchNormalization(input, name='bn'):
-	
-	with tf.variable_scope(name):
-	
-		output_dim = input.get_shape()[-1]
-		beta = tf.get_variable('BnBeta', [output_dim],
-								initializer=tf.zeros_initializer())
-		gamma = tf.get_variable('BnGamma', [output_dim],
-								initializer=tf.ones_initializer())
-	
-		if len(input.get_shape()) == 2:
-			mean, var = tf.nn.moments(input, [0])
-		else:
-			mean, var = tf.nn.moments(input, [0, 1, 2])
-		return tf.nn.batch_normalization(input, mean, var, beta, gamma, 1e-5)
+	return tf.contrib.layers.batch_norm(input, center=True, scale=True, decay=0.9, is_training=True, updates_collections=None, epsilon=1e-5)	
 	
 def LeakyReLU(input, leak=0.2, name='lrelu'):
 	
@@ -172,10 +159,10 @@ def Discriminator(X, reuse=False, name='d'):
 	# 2 conv3s, avg pool. then 2 conv3s, avg pool.
 	with tf.variable_scope(name, reuse=reuse):
 		if len(X.get_shape()) > 2:
-			# X: -1, 64, 64, 4
+			# X: -1, 32, 32, 4
 			D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='Disc_conv1')
 		else:
-			D_reshaped = tf.reshape(X, [-1, 64, 64, 4])
+			D_reshaped = tf.reshape(X, [-1, 32, 32, 4])
 			D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='Disc_conv1')
 		D_h1 = LeakyReLU(D_conv1)
 		D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='Disc_conv2')
@@ -200,8 +187,7 @@ def Generator(z, name='g'):
 	# Project to 1024*4*4 then reshape
 	# Then deconv with stride 2, 5x5 filters into 512*8*8
 	# Then deconv with stride 2, 5x5 filters into 256*16*16
-	# Then deconv with stride 2, 5x5 filters into 128*32*32
-	# Then deconv with stride 2, 5x5 filters into 4*64*64
+	# Then deconv with stride 2, 5x5 filters into 4*32*32
 	with tf.variable_scope(name):
 
 		G_1 = Dense(z, output_dim=1024*4*4, name='Gen_1')
@@ -217,15 +203,11 @@ def Generator(z, name='g'):
 		G_bn3 = BatchNormalization(G_conv3, name='Gen_bn3')
 		G_h3 = tf.nn.relu(G_bn3)
 
-		G_conv4 = Deconv2d(G_h3, output_dim=128, batch_size=BATCH_SIZE, name='Gen_conv4')
+		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=BATCH_SIZE, name='Gen_conv4')
 		G_bn4 = BatchNormalization(G_conv4, name='Gen_bn4')
 		G_h4 = tf.nn.relu(G_bn4)
-
-		G_conv5 = Deconv2d(G_h4, output_dim=4, batch_size=BATCH_SIZE, name='Gen_conv5')
-		G_bn5 = BatchNormalization(G_conv5, name='Gen_bn5')
-		G_h5 = tf.nn.relu(G_bn5)
-		G_r5 = tf.reshape(G_h5, [-1, 64*64*4]) # -1 is for batch size
-		return tf.nn.tanh(G_r5)
+                G_r4 = tf.reshape(G_h4, [-1, 32*32*4]) # -1 is for batch size
+                return tf.nn.tanh(G_r4)
 
 X = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE])
 z = tf.placeholder(tf.float32, shape=[None, 100])
@@ -256,7 +238,7 @@ def train(loss_tensor, params, learning_rate, beta1):
 	for grad, var in grads:
 		if grad is not None:
 			tf.summary.histogram(var.op.name + "/gradient", grad)
-			tf.summary.histogram(var.opname + "/gradient/sparsity", tf.nn.zero_fraction(grad))
+			tf.summary.histogram(var.op.name + "/gradient/sparsity", tf.nn.zero_fraction(grad))
 	return optimizer.apply_gradients(grads)
 
 
@@ -289,6 +271,7 @@ with tf.Session() as sess:
 			train_writer.add_summary(summary, e*ITERATIONS + i + 1)
 			rand = np.random.uniform(0., 1., size=[BATCH_SIZE, 100])
 
+			_, G_loss_curr = sess.run([G_solver, G_loss], {z: rand})
 			_, G_loss_curr = sess.run([G_solver, G_loss], {z: rand})
 
 			D_loss_vals.append(D_loss_curr)
