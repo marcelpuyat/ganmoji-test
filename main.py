@@ -13,9 +13,9 @@ import scipy.misc
 import commands
 import time
 
-ITERATIONS = 10
+ITERATIONS = 50
 BATCH_SIZE = 64
-EPOCHS = 10000
+EPOCHS = 1000
 IMAGE_SIZE = 32*32*4
 
 image_filenames = []
@@ -204,7 +204,7 @@ def Generator(z, name='g'):
 		with tf.name_scope('activation_1'):
 			variable_summaries(G_h1)
 
-		G_conv2 = Deconv2d(G_r1, output_dim=512, batch_size=BATCH_SIZE, name='Gen_conv2')
+		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=BATCH_SIZE, name='Gen_conv2')
 		G_bn2 = BatchNormalization(G_conv2, name='Gen_bn2')
 		G_h2 = LeakyReLU(G_bn2)
 		with tf.name_scope('activation_2'):
@@ -223,6 +223,9 @@ def Generator(z, name='g'):
 			variable_summaries(G_h4)
 
 		G_r4 = tf.reshape(G_h4, [-1, 32*32*4]) # -1 is for batch size
+
+		# This seems wrong... we're sending in the output of a ReLU into a tanh???!?!?
+
 		tanh_layer = tf.nn.tanh(G_r4)
 		with tf.name_scope('tanh'):
 			variable_summaries(tanh_layer)
@@ -243,11 +246,13 @@ D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_lo
 D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)))
 feature_matching_loss = tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)) / (16 * 16)
 
+D_loss = D_real + D_fake
+G_loss = D_fake_wrong + 0.2 * feature_matching_loss
+
 tf.summary.scalar("D_real", D_real)
 tf.summary.scalar("D_fake", D_fake)
 tf.summary.scalar("feature_matching_loss", feature_matching_loss)
-D_loss = D_real + D_fake
-G_loss = D_fake_wrong + 0.2 * feature_matching_loss
+tf.summary.scalar("G_loss", G_loss)
 
 vars = tf.trainable_variables()
 d_params = [v for v in vars if v.name.startswith('Discriminator/')]
