@@ -5,3 +5,7 @@
 * Talk about batch norm in generator
 * Dropout in discriminator
 * Higher learning rate for generator
+* Run generator twice as often
+* Leaky Relu for generator instead of Relu
+* Feature Matching
+* Instance noise in discriminator

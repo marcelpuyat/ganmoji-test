@@ -13,7 +13,7 @@ import scipy.misc
 import commands
 import time
 
-ITERATIONS = 100
+ITERATIONS = 10
 BATCH_SIZE = 64
 EPOCHS = 10000
 IMAGE_SIZE = 32*32*4
@@ -29,8 +29,7 @@ image_filenames = get_image_filenames() # Load all image filenames into memory
 
 def get_pixels_for_filename(filename):
     img = scipy.misc.imread(filename, mode='RGBA')
-    img = Image.fromarray(img)
-    return np.array(img.getdata())
+    return np.array(img)
 
 curr_image_idx = 0
 def get_next_image_batch(batch_size):
@@ -50,16 +49,19 @@ def get_next_image_batch(batch_size):
 				shuffle(image_filenames)
 			# Note that we don't store all pixels in memory bec of memory constraints
 			pix = get_pixels_for_filename(image_filenames[curr_image_idx])
-			if pix.shape != (1024, 4):
+			if pix.shape != (32, 32, 4):
 				print('Invalid pixels shape for file ' + image_filenames[curr_image_idx] + ': ' + str(pix.shape))
 				# Skip this image
 				curr_image_idx += 1
 				continue
 
-			batch[i] = get_pixels_for_filename(image_filenames[curr_image_idx]).reshape([IMAGE_SIZE])
+			batch[i] = pix.reshape([IMAGE_SIZE])
 			curr_image_idx += 1
 			break
 	return batch
+
+def denormalize_image(image):
+	return np.multiply(np.divide((1 + image), 2), 255)
 
 def plot(samples, D_loss, G_loss, epoch, total):
 	fig = plt.figure(figsize=(10, 5))
@@ -78,7 +80,7 @@ def plot(samples, D_loss, G_loss, epoch, total):
 	# Generate images
 	for i, sample in enumerate(samples):
 		# need to convert sample from range -1,1 to 0 255
-		sample = np.multiply(np.divide((1 + sample), 2), 255)
+		sample = denormalize_image(sample)
 		if i > 4* 4 - 1:
 			break
 		# Plot in the left half
@@ -87,7 +89,7 @@ def plot(samples, D_loss, G_loss, epoch, total):
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		ax.set_aspect('equal')
-		plt.imshow(sample.reshape(32, 32, 4))
+		plt.imshow(sample.reshape(32, 32, 4).astype(np.uint8))
 
 	plt.savefig('./output/' + str(epoch + 1) + '.png')
 	print('./output/' + str(epoch + 1) + '.png')
@@ -96,6 +98,10 @@ def plot(samples, D_loss, G_loss, epoch, total):
 def variable_summaries(var):
 	"""Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
 	tf.summary.histogram(var.op.name, var)
+
+def gaussian_noise_layer(input_layer, std):
+	noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32) 
+	return input_layer + noise
 
 def Conv2d(input, output_dim=64, kernel=(5, 5), strides=(2, 2), stddev=0.02, name='conv_2d'):
 
@@ -151,13 +157,14 @@ def Dense(input, output_dim, stddev=0.02, name='dense'):
 def BatchNormalization(input, name='bn'):
 	return tf.contrib.layers.batch_norm(input, center=True, scale=True, decay=0.9, is_training=True, updates_collections=None, epsilon=1e-5)	
 	
-def LeakyReLU(input, leak=0.2, name='lrelu'):
+def LeakyReLU(input, leak=0.4, name='lrelu'):
 	
-	return tf.maximum(input, leak*input)
+	return tf.maximum(input, leak*input, name='LeakyRelu')
 
 def Discriminator(X, reuse=False, name='d'):
 	# 2 conv3s, avg pool. then 2 conv3s, avg pool.
 	with tf.variable_scope(name, reuse=reuse):
+		X = gaussian_noise_layer(X, 0.2)
 		if len(X.get_shape()) > 2:
 			# X: -1, 32, 32, 4
 			D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='Disc_conv1')
@@ -178,9 +185,9 @@ def Discriminator(X, reuse=False, name='d'):
 		D_h4_pooled = tf.nn.avg_pool(D_h4, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
 		D_r = tf.reshape(D_h4_pooled, [-1, 256])
-		D_h5 = tf.nn.dropout(D_r, 0.7)
+		D_h5 = tf.nn.dropout(D_r, 0.6)
 		D_h6 = Dense(D_h5, output_dim=1, name='Disc_h6')
-		return tf.nn.sigmoid(D_h6), D_h6
+		return tf.nn.sigmoid(D_h6), D_h6, D_h4
 
 def Generator(z, name='g'):
 
@@ -192,29 +199,41 @@ def Generator(z, name='g'):
 
 		G_1 = Dense(z, output_dim=1024*4*4, name='Gen_1')
 		G_bn1 = BatchNormalization(G_1, name='Gen_bn1')
-		G_h1 = tf.nn.relu(G_bn1)
+		G_h1 = LeakyReLU(G_bn1)
+		with tf.name_scope('activation_1'):
+			variable_summaries(G_h1)
 		G_r1 = tf.reshape(G_h1, [-1, 4, 4, 1024])
 
 		G_conv2 = Deconv2d(G_r1, output_dim=512, batch_size=BATCH_SIZE, name='Gen_conv2')
 		G_bn2 = BatchNormalization(G_conv2, name='Gen_bn2')
-		G_h2 = tf.nn.relu(G_bn2)
+		G_h2 = LeakyReLU(G_bn2)
+		with tf.name_scope('activation_2'):
+			variable_summaries(G_h2)
 
 		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=BATCH_SIZE, name='Gen_conv3')
 		G_bn3 = BatchNormalization(G_conv3, name='Gen_bn3')
-		G_h3 = tf.nn.relu(G_bn3)
+		G_h3 = LeakyReLU(G_bn3)
+		with tf.name_scope('activation_3'):
+			variable_summaries(G_h3)
 
 		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=BATCH_SIZE, name='Gen_conv4')
 		G_bn4 = BatchNormalization(G_conv4, name='Gen_bn4')
-		G_h4 = tf.nn.relu(G_bn4)
-                G_r4 = tf.reshape(G_h4, [-1, 32*32*4]) # -1 is for batch size
-                return tf.nn.tanh(G_r4)
+		G_h4 = LeakyReLU(G_bn4)
+		with tf.name_scope('activation_4'):
+			variable_summaries(G_h4)
+
+		G_r4 = tf.reshape(G_h4, [-1, 32*32*4]) # -1 is for batch size
+		tanh_layer = tf.nn.tanh(G_r4)
+		with tf.name_scope('tanh'):
+			variable_summaries(tanh_layer)
+		return tanh_layer
 
 X = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE])
 z = tf.placeholder(tf.float32, shape=[None, 100])
 
 G = Generator(z, 'Generator')
-D_real_prob, D_real_logits = Discriminator(X, False, 'Discriminator')
-D_fake_prob, D_fake_logits = Discriminator(G, True, 'Discriminator')
+D_real_prob, D_real_logits, feature_matching_real = Discriminator(X, False, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake = Discriminator(G, True, 'Discriminator')
 
 tf.summary.histogram("d_real_prob/activation", tf.identity(D_real_prob, 'd_real_prob'))
 tf.summary.histogram("d_fake_prob/activation", tf.identity(D_fake_prob, 'd_fake_prob'))
@@ -222,11 +241,13 @@ tf.summary.histogram("d_fake_prob/activation", tf.identity(D_fake_prob, 'd_fake_
 D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.8)))) # one sided label smoothing
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)))
 D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)))
+feature_matching_loss = tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)) / (16 * 16)
 
 tf.summary.scalar("D_real", D_real)
 tf.summary.scalar("D_fake", D_fake)
+tf.summary.scalar("feature_matching_loss", feature_matching_loss)
 D_loss = D_real + D_fake
-G_loss = D_fake_wrong
+G_loss = D_fake_wrong + 0.2 * feature_matching_loss
 
 vars = tf.trainable_variables()
 d_params = [v for v in vars if v.name.startswith('Discriminator/')]
@@ -242,8 +263,8 @@ def train(loss_tensor, params, learning_rate, beta1):
 	return optimizer.apply_gradients(grads)
 
 
-D_solver = train(D_loss, d_params, learning_rate=1e-4, beta1=0.1)
-G_solver = train(G_loss, g_params, learning_rate=2e-4, beta1=0.3)
+D_solver = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
+G_solver = train(G_loss, g_params, learning_rate=1e-3, beta1=0.5)
 
 def normalize_image_batches(image_batches):
 	normalized_batches = np.zeros(image_batches.shape)
@@ -254,10 +275,10 @@ def normalize_image_batches(image_batches):
 with tf.Session() as sess:
 	merged = tf.summary.merge_all()
 	train_writer = tf.summary.FileWriter('tensorboard/',
-                                      	  sess.graph)
+										 sess.graph)
 
 	sess.run(tf.global_variables_initializer())
-    
+
 	D_loss_vals = []
 	G_loss_vals = []
 
@@ -266,13 +287,20 @@ with tf.Session() as sess:
 		for i in range(ITERATIONS):
 			x = get_next_image_batch(BATCH_SIZE)
 			x = normalize_image_batches(x)
-			rand = np.random.uniform(0., 1., size=[BATCH_SIZE, 100])
-			summary, _, D_loss_curr = sess.run([merged, D_solver, D_loss], {X: x, z: rand})
-			train_writer.add_summary(summary, e*ITERATIONS + i + 1)
-			rand = np.random.uniform(0., 1., size=[BATCH_SIZE, 100])
 
-			_, G_loss_curr = sess.run([G_solver, G_loss], {z: rand})
-			_, G_loss_curr = sess.run([G_solver, G_loss], {z: rand})
+			rand = np.random.uniform(0., 1., size=[BATCH_SIZE, 100]).astype(np.float32)
+			_, D_loss_curr = sess.run([D_solver, D_loss], {X: x, z: rand})
+
+			_, G_loss_curr = sess.run([G_solver, G_loss], {X: x, z: rand})
+			summary, _, G_loss_curr = sess.run([merged, G_solver, G_loss], {X: x, z: rand})
+
+			generated_images = sess.run(G, {z: rand})
+			print("Generated images")
+			for b in generated_images:
+				print("Another image:")
+				print(denormalize_image(b).reshape(32, 32, 4).astype(np.uint8))
+
+			train_writer.add_summary(summary, e*ITERATIONS + i + 1)
 
 			D_loss_vals.append(D_loss_curr)
 			G_loss_vals.append(G_loss_curr)
