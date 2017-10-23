@@ -198,11 +198,11 @@ def Generator(z, name='g'):
 	with tf.variable_scope(name):
 
 		G_1 = Dense(z, output_dim=1024*4*4, name='Gen_1')
-		G_bn1 = BatchNormalization(G_1, name='Gen_bn1')
+		G_r1 = tf.reshape(G_1, [-1, 4, 4, 1024])
+		G_bn1 = BatchNormalization(G_r1, name='Gen_bn1')
 		G_h1 = LeakyReLU(G_bn1)
 		with tf.name_scope('activation_1'):
 			variable_summaries(G_h1)
-		G_r1 = tf.reshape(G_h1, [-1, 4, 4, 1024])
 
 		G_conv2 = Deconv2d(G_r1, output_dim=512, batch_size=BATCH_SIZE, name='Gen_conv2')
 		G_bn2 = BatchNormalization(G_conv2, name='Gen_bn2')
