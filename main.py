@@ -13,7 +13,11 @@ import scipy.misc
 import commands
 import time
 
+ITERATIONS = 100
+BATCH_SIZE = 64
+EPOCHS = 10000
 IMAGE_SIZE = 64*64*4
+
 image_filenames = []
 
 def get_image_filenames():
@@ -91,17 +95,9 @@ def plot(samples, D_loss, G_loss, epoch, total):
 
 def variable_summaries(var):
 	"""Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-	with tf.name_scope('summaries'):
-		mean = tf.reduce_mean(var)
-		tf.summary.scalar('mean', mean)
-		with tf.name_scope('stddev'):
-			stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-		tf.summary.scalar('stddev', stddev)
-		tf.summary.scalar('max', tf.reduce_max(var))
-		tf.summary.scalar('min', tf.reduce_min(var))
-		tf.summary.histogram('histogram', var)
+	tf.summary.histogram(var.op.name, var)
 
-def Conv2d(input, output_dim=64, kernel=(5, 5), strides=(2, 2), stddev=0.2, name='conv_2d'):
+def Conv2d(input, output_dim=64, kernel=(5, 5), strides=(2, 2), stddev=0.02, name='conv_2d'):
 
 	with tf.variable_scope(name):
 		W = tf.get_variable('Conv2dW', [kernel[0], kernel[1], input.get_shape()[-1], output_dim],
@@ -115,7 +111,7 @@ def Conv2d(input, output_dim=64, kernel=(5, 5), strides=(2, 2), stddev=0.2, name
 
 		return tf.nn.conv2d(input, W, strides=[1, strides[0], strides[1], 1], padding='SAME') + b
 
-def Deconv2d(input, output_dim, batch_size, kernel=(5, 5), strides=(2, 2), stddev=0.2, name='deconv_2d'):
+def Deconv2d(input, output_dim, batch_size, kernel=(5, 5), strides=(2, 2), stddev=0.02, name='deconv_2d'):
 	
 	with tf.variable_scope(name):
 		W = tf.get_variable('Deconv2dW', [kernel[0], kernel[1], output_dim, input.get_shape()[-1]], initializer=tf.truncated_normal_initializer(stddev=stddev))
@@ -171,9 +167,6 @@ def BatchNormalization(input, name='bn'):
 def LeakyReLU(input, leak=0.2, name='lrelu'):
 	
 	return tf.maximum(input, leak*input)
-
-BATCH_SIZE = 64
-EPOCHS = 1000
 
 def Discriminator(X, reuse=False, name='d'):
 	# 2 conv3s, avg pool. then 2 conv3s, avg pool.
@@ -238,23 +231,37 @@ X = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE])
 z = tf.placeholder(tf.float32, shape=[None, 100])
 
 G = Generator(z, 'Generator')
-_, D_real_logits = Discriminator(X, False, 'Discriminator')
-_, D_fake_logits = Discriminator(G, True, 'Discriminator')
+D_real_prob, D_real_logits = Discriminator(X, False, 'Discriminator')
+D_fake_prob, D_fake_logits = Discriminator(G, True, 'Discriminator')
 
-D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.9)))) # one sided label smoothing
+tf.summary.histogram("d_real_prob/activation", tf.identity(D_real_prob, 'd_real_prob'))
+tf.summary.histogram("d_fake_prob/activation", tf.identity(D_fake_prob, 'd_fake_prob'))
+
+D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.8)))) # one sided label smoothing
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)))
+D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)))
 
 tf.summary.scalar("D_real", D_real)
 tf.summary.scalar("D_fake", D_fake)
 D_loss = D_real + D_fake
-G_loss = -D_fake
+G_loss = D_fake_wrong
 
 vars = tf.trainable_variables()
 d_params = [v for v in vars if v.name.startswith('Discriminator/')]
 g_params = [v for v in vars if v.name.startswith('Generator/')]
 
-D_solver = tf.train.AdamOptimizer(learning_rate=1e-4, beta1=0.1).minimize(D_loss, var_list=d_params)
-G_solver = tf.train.AdamOptimizer(learning_rate=2e-4, beta1=0.3).minimize(G_loss, var_list=g_params)
+def train(loss_tensor, params, learning_rate, beta1):
+	optimizer = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+	grads = optimizer.compute_gradients(loss_tensor, var_list=params)
+	for grad, var in grads:
+		if grad is not None:
+			tf.summary.histogram(var.op.name + "/gradient", grad)
+			tf.summary.histogram(var.opname + "/gradient/sparsity", tf.nn.zero_fraction(grad))
+	return optimizer.apply_gradients(grads)
+
+
+D_solver = train(D_loss, d_params, learning_rate=1e-4, beta1=0.1)
+G_solver = train(G_loss, g_params, learning_rate=2e-4, beta1=0.3)
 
 def normalize_image_batches(image_batches):
 	normalized_batches = np.zeros(image_batches.shape)
@@ -272,25 +279,23 @@ with tf.Session() as sess:
 	D_loss_vals = []
 	G_loss_vals = []
 
-	iteration = 4
 	for e in range(EPOCHS):
 
-		for i in range(iteration):
+		for i in range(ITERATIONS):
 			x = get_next_image_batch(BATCH_SIZE)
 			x = normalize_image_batches(x)
 			rand = np.random.uniform(0., 1., size=[BATCH_SIZE, 100])
 			summary, _, D_loss_curr = sess.run([merged, D_solver, D_loss], {X: x, z: rand})
-			train_writer.add_summary(summary, i)
+			train_writer.add_summary(summary, e*ITERATIONS + i + 1)
 			rand = np.random.uniform(0., 1., size=[BATCH_SIZE, 100])
 
-			for _ in range(5):
-				_, G_loss_curr = sess.run([G_solver, G_loss], {z: rand})
+			_, G_loss_curr = sess.run([G_solver, G_loss], {z: rand})
 
 			D_loss_vals.append(D_loss_curr)
 			G_loss_vals.append(G_loss_curr)
 
-			sys.stdout.write("\r%d / %d: %f, %f" % (i, iteration, D_loss_curr, G_loss_curr))
+			sys.stdout.write("\r%d / %d: %f, %f" % (i, ITERATIONS, D_loss_curr, G_loss_curr))
 			sys.stdout.flush()
 
 		data = sess.run(G, {z: rand})
-		plot(data, D_loss_vals, G_loss_vals, e, EPOCHS * iteration)
+		plot(data, D_loss_vals, G_loss_vals, e, EPOCHS * ITERATIONS)
