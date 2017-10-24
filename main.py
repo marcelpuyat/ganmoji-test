@@ -13,7 +13,7 @@ import scipy.misc
 import commands
 import time
 
-ITERATIONS = 40
+ITERATIONS = 50
 BATCH_SIZE = 64
 EPOCHS = 1000
 IMAGE_SIZE = 32*32*4
@@ -21,8 +21,8 @@ IMAGE_SIZE = 32*32*4
 image_filenames = []
 
 def get_image_filenames():
-	s = commands.getstatusoutput('ls small_data')
-	filenames = ['small_data/' + string for string in s[1].split()]
+	s = commands.getstatusoutput('ls data')
+	filenames = ['data/' + string for string in s[1].split()]
 	shuffle(filenames)
 	return filenames
 image_filenames = get_image_filenames() # Load all image filenames into memory
@@ -157,6 +157,25 @@ def BatchNormalization(input, name='bn'):
 def LeakyReLU(input, leak=0.6, name='lrelu'):
 	return tf.maximum(input, leak*input, name='LeakyRelu')
 
+def minibatch(inputs, num_kernels=5, kernel_dim=3):
+	with tf.variable_scope('minibatch_discrim'):
+		W = tf.get_variable("W",
+							shape=[inputs.get_shape()[1], num_kernels*kernel_dim],
+							initializer=tf.random_normal_initializer(stddev=0.02))
+		b = tf.get_variable("b",
+							shape=[num_kernels*kernel_dim],
+							initializer=tf.constant_initializer(0.0))
+		variable_summaries(W)
+		variable_summaries(b)
+		x = tf.matmul(inputs, W) + b
+		activation = tf.reshape(x, (-1, num_kernels, kernel_dim))
+		diffs = tf.expand_dims(activation, 3) - tf.expand_dims(
+			tf.transpose(activation, [1, 2, 0]), 0)
+		eps = tf.expand_dims(np.eye(int(inputs.get_shape()[0]), dtype=np.float32), 1)
+		abs_diffs = tf.reduce_sum(tf.abs(diffs), 2) + eps
+		minibatch_features = tf.reduce_sum(tf.exp(-abs_diffs), 2)
+		return tf.concat([inputs, minibatch_features], 1)
+
 def Discriminator(X, reuse=False, name='d'):
 	# 2 conv3s, avg pool. then 2 conv3s, avg pool.
 	with tf.variable_scope(name, reuse=reuse):
@@ -165,9 +184,10 @@ def Discriminator(X, reuse=False, name='d'):
 			# X: -1, 32, 32, 4
 			D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='conv1')
 		else:
-			D_reshaped = tf.reshape(X, [-1, 32, 32, 4])
+			D_reshaped = tf.reshape(X, [BATCH_SIZE, 32, 32, 4])
 			D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='conv1')
 		D_h1 = LeakyReLU(D_conv1)
+
 		D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='conv2')
 		D_h2 = LeakyReLU(D_conv2)
 
@@ -180,9 +200,12 @@ def Discriminator(X, reuse=False, name='d'):
 
 		D_h4_pooled = tf.nn.avg_pool(D_h4, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-		D_r = tf.reshape(D_h4_pooled, [-1, 256])
+		D_r = tf.reshape(D_h4_pooled, [BATCH_SIZE, 256])
 		D_h5 = tf.nn.dropout(D_r, 0.6)
-		D_h6 = Dense(D_h5, output_dim=1, name='dense')
+
+		D_after_minibatch_discrim = minibatch(D_h5)
+
+		D_h6 = Dense(D_after_minibatch_discrim, output_dim=1, name='dense')
 		preds = tf.nn.sigmoid(D_h6, name='predictions')
 		return preds, D_h6, D_h4
 
@@ -195,7 +218,7 @@ def Generator(z, name='g'):
 	with tf.variable_scope(name):
 
 		G_1 = Dense(z, output_dim=1024*4*4, name='dense')
-		G_r1 = tf.reshape(G_1, [-1, 4, 4, 1024])
+		G_r1 = tf.reshape(G_1, [BATCH_SIZE, 4, 4, 1024])
 		G_bn1 = BatchNormalization(G_r1, name='dense_bn')
 		G_h1 = LeakyReLU(G_bn1)
 		with tf.name_scope('dense_activation'):
@@ -214,18 +237,18 @@ def Generator(z, name='g'):
 			variable_summaries(G_h3)
 
 		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=BATCH_SIZE, name='deconv3')
-		G_r4 = tf.reshape(G_conv4, [-1, 32*32*4]) # -1 is for batch size
+		G_r4 = tf.reshape(G_conv4, [BATCH_SIZE, 32*32*4]) # -1 is for batch size
 		tanh_layer = tf.nn.tanh(G_r4)
 		with tf.name_scope('tanh'):
 			variable_summaries(tanh_layer)
 		return tanh_layer
 
-X = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE], name="real_images_input")
-z = tf.placeholder(tf.float32, shape=[None, 100], name="generator_latent_space_input")
+X = tf.placeholder(tf.float32, shape=[BATCH_SIZE, IMAGE_SIZE], name="real_images_input")
+z = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 100], name="generator_latent_space_input")
 
 G = Generator(z, 'Generator')
 D_real_prob, D_real_logits, feature_matching_real = Discriminator(X, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake = Discriminator(G, True, 'Discriminator_reused')
+D_fake_prob, D_fake_logits, feature_matching_fake = Discriminator(G, True, 'Discriminator')
 
 tf.summary.histogram("d_real_prob", D_real_prob)
 tf.summary.histogram("d_fake_prob", D_fake_prob)
@@ -233,7 +256,7 @@ tf.summary.histogram("d_fake_prob", D_fake_prob)
 D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.8))), name="disc_real_cross_entropy") # one sided label smoothing
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)), name="disc_fake_cross_entropy")
 D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
-feature_matching_loss = tf.divide(tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)), (16 * 16), name="feature_matching_loss")
+feature_matching_loss = tf.divide(tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)), (float(16) * 16), name="feature_matching_loss")
 
 D_loss = tf.add(D_real, D_fake, "disc_loss")
 G_loss = tf.add(D_fake_wrong, 0.2 * feature_matching_loss, "generator_loss")
@@ -256,8 +279,8 @@ def train(loss_tensor, params, learning_rate, beta1):
 	return optimizer.apply_gradients(grads)
 
 
-D_solver = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
-G_solver = train(G_loss, g_params, learning_rate=2e-4, beta1=0.5)
+D_solver = train(D_loss, d_params, learning_rate=1e-3, beta1=0.5)
+G_solver = train(G_loss, g_params, learning_rate=1e-3, beta1=0.5)
 
 def normalize_image_batches(image_batches):
 	normalized_batches = np.zeros(image_batches.shape)
@@ -288,10 +311,6 @@ with tf.Session() as sess:
 			summary, _, G_loss_curr = sess.run([merged, G_solver, G_loss], {X: x, z: rand})
 
 			generated_images = sess.run(G, {z: rand})
-			print("Generated images")
-			for b in generated_images:
-				print("Another image:")
-				print(denormalize_image(b).reshape(32, 32, 4).astype(np.uint8))
 
 			train_writer.add_summary(summary, e*ITERATIONS + i + 1)
 
