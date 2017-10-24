@@ -8,4 +8,5 @@
 * Run generator twice as often
 * Leaky Relu for generator instead of Relu
 * Feature Matching
-* Instance noise in discriminator
+* Instance noise in discriminatorminibatch disc
+Compute minibatch discrim at beginning, but append to the end

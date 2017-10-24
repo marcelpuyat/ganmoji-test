@@ -13,16 +13,16 @@ import scipy.misc
 import commands
 import time
 
-ITERATIONS = 50
+ITERATIONS = 10
 BATCH_SIZE = 64
-EPOCHS = 1000
+EPOCHS = 100000
 IMAGE_SIZE = 32*32*4
 
 image_filenames = []
 
 def get_image_filenames():
-	s = commands.getstatusoutput('ls data')
-	filenames = ['data/' + string for string in s[1].split()]
+	s = commands.getstatusoutput('ls small_data')
+	filenames = ['small_data/' + string for string in s[1].split()]
 	shuffle(filenames)
 	return filenames
 image_filenames = get_image_filenames() # Load all image filenames into memory
@@ -157,7 +157,7 @@ def BatchNormalization(input, name='bn'):
 def LeakyReLU(input, leak=0.6, name='lrelu'):
 	return tf.maximum(input, leak*input, name='LeakyRelu')
 
-def minibatch(inputs, num_kernels=5, kernel_dim=3):
+def minibatch(inputs, num_kernels=32, kernel_dim=3):
 	with tf.variable_scope('minibatch_discrim'):
 		W = tf.get_variable("W",
 							shape=[inputs.get_shape()[1], num_kernels*kernel_dim],
@@ -173,8 +173,7 @@ def minibatch(inputs, num_kernels=5, kernel_dim=3):
 			tf.transpose(activation, [1, 2, 0]), 0)
 		eps = tf.expand_dims(np.eye(int(inputs.get_shape()[0]), dtype=np.float32), 1)
 		abs_diffs = tf.reduce_sum(tf.abs(diffs), 2) + eps
-		minibatch_features = tf.reduce_sum(tf.exp(-abs_diffs), 2)
-		return tf.concat([inputs, minibatch_features], 1)
+		return tf.reduce_sum(tf.exp(-abs_diffs), 2)
 
 def Discriminator(X, reuse=False, name='d'):
 	# 2 conv3s, avg pool. then 2 conv3s, avg pool.
@@ -186,6 +185,9 @@ def Discriminator(X, reuse=False, name='d'):
 		else:
 			D_reshaped = tf.reshape(X, [BATCH_SIZE, 32, 32, 4])
 			D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='conv1')
+
+		D_conv1_reshaped = tf.reshape(D_conv1, [BATCH_SIZE, -1])
+		minibatch_features = minibatch(D_conv1_reshaped) # Saved for the end
 		D_h1 = LeakyReLU(D_conv1)
 
 		D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='conv2')
@@ -201,13 +203,11 @@ def Discriminator(X, reuse=False, name='d'):
 		D_h4_pooled = tf.nn.avg_pool(D_h4, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
 		D_r = tf.reshape(D_h4_pooled, [BATCH_SIZE, 256])
-		D_h5 = tf.nn.dropout(D_r, 0.6)
-
-		D_after_minibatch_discrim = minibatch(D_h5)
-
-		D_h6 = Dense(D_after_minibatch_discrim, output_dim=1, name='dense')
+		D_r_with_minibatch_discrim = tf.concat([D_r, minibatch_features], 1)
+		D_h5 = tf.nn.dropout(D_r_with_minibatch_discrim, 0.6)
+		D_h6 = Dense(D_h5, output_dim=1, name='dense')
 		preds = tf.nn.sigmoid(D_h6, name='predictions')
-		return preds, D_h6, D_h4
+		return preds, D_h6, D_h4, minibatch_features
 
 def Generator(z, name='g'):
 
@@ -247,8 +247,8 @@ X = tf.placeholder(tf.float32, shape=[BATCH_SIZE, IMAGE_SIZE], name="real_images
 z = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 100], name="generator_latent_space_input")
 
 G = Generator(z, 'Generator')
-D_real_prob, D_real_logits, feature_matching_real = Discriminator(X, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake = Discriminator(G, True, 'Discriminator')
+D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = Discriminator(X, False, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = Discriminator(G, True, 'Discriminator')
 
 tf.summary.histogram("d_real_prob", D_real_prob)
 tf.summary.histogram("d_fake_prob", D_fake_prob)
@@ -259,11 +259,14 @@ D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_f
 feature_matching_loss = tf.divide(tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)), (float(16) * 16), name="feature_matching_loss")
 
 D_loss = tf.add(D_real, D_fake, "disc_loss")
-G_loss = tf.add(D_fake_wrong, 0.2 * feature_matching_loss, "generator_loss")
+# Minibatch_similarity_loss = tf.nn.l2_loss(minibatch_features_real, minibatch_features_fake, "minibatch_similarity_loss")
+G_loss = tf.add(D_fake_wrong, (0.1 * feature_matching_loss), "generator_loss")
 
 tf.summary.scalar("D_real_loss", D_real)
 tf.summary.scalar("D_fake_loss", D_fake)
 tf.summary.scalar("feature_matching_loss", feature_matching_loss)
+tf.summary.histogram("minibatch_similarity_real", minibatch_similarity_real)
+tf.summary.histogram("minibatch_similarity_fake", minibatch_similarity_fake)
 tf.summary.scalar("G_loss", G_loss)
 
 vars = tf.trainable_variables()
@@ -279,8 +282,8 @@ def train(loss_tensor, params, learning_rate, beta1):
 	return optimizer.apply_gradients(grads)
 
 
-D_solver = train(D_loss, d_params, learning_rate=1e-3, beta1=0.5)
-G_solver = train(G_loss, g_params, learning_rate=1e-3, beta1=0.5)
+D_solver = train(D_loss, d_params, learning_rate=2e-3, beta1=0.5)
+G_solver = train(G_loss, g_params, learning_rate=2e-3, beta1=0.5)
 
 def normalize_image_batches(image_batches):
 	normalized_batches = np.zeros(image_batches.shape)
