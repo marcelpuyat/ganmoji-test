@@ -13,7 +13,7 @@ import scipy.misc
 import commands
 import time
 
-ITERATIONS = 50
+ITERATIONS = 40
 BATCH_SIZE = 64
 EPOCHS = 1000
 IMAGE_SIZE = 32*32*4
@@ -101,16 +101,15 @@ def variable_summaries(var):
 
 def gaussian_noise_layer(input_layer, std):
 	noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32) 
-	return input_layer + noise
+	return tf.add(input_layer, noise, 'add_gaussian_noise')
 
 def Conv2d(input, output_dim=64, kernel=(5, 5), strides=(2, 2), stddev=0.02, name='conv_2d'):
-
 	with tf.variable_scope(name):
-		W = tf.get_variable('Conv2dW', [kernel[0], kernel[1], input.get_shape()[-1], output_dim],
+		W = tf.get_variable('convW', [kernel[0], kernel[1], input.get_shape()[-1], output_dim],
 							initializer=tf.truncated_normal_initializer(stddev=stddev))
 		with tf.name_scope('W'):
 			variable_summaries(W)
-		b = tf.get_variable('Conv2db', [output_dim], initializer=tf.zeros_initializer())
+		b = tf.get_variable('convb', [output_dim], initializer=tf.zeros_initializer())
 		with tf.name_scope('b'):
 			variable_summaries(b)
 	    
@@ -118,12 +117,11 @@ def Conv2d(input, output_dim=64, kernel=(5, 5), strides=(2, 2), stddev=0.02, nam
 		return tf.nn.conv2d(input, W, strides=[1, strides[0], strides[1], 1], padding='SAME') + b
 
 def Deconv2d(input, output_dim, batch_size, kernel=(5, 5), strides=(2, 2), stddev=0.02, name='deconv_2d'):
-	
 	with tf.variable_scope(name):
-		W = tf.get_variable('Deconv2dW', [kernel[0], kernel[1], output_dim, input.get_shape()[-1]], initializer=tf.truncated_normal_initializer(stddev=stddev))
+		W = tf.get_variable('deconvW', [kernel[0], kernel[1], output_dim, input.get_shape()[-1]], initializer=tf.truncated_normal_initializer(stddev=stddev))
 		with tf.name_scope('W'):
 			variable_summaries(W)
-		b = tf.get_variable('Deconv2db', [output_dim], initializer=tf.zeros_initializer())
+		b = tf.get_variable('deconvb', [output_dim], initializer=tf.zeros_initializer())
 		with tf.name_scope('b'):
 			variable_summaries(b)
 
@@ -139,15 +137,14 @@ def Deconv2d(input, output_dim, batch_size, kernel=(5, 5), strides=(2, 2), stdde
 		return deconv + b
 
 def Dense(input, output_dim, stddev=0.02, name='dense'):
-	
 	with tf.variable_scope(name):
 	    
 		shape = input.get_shape()
-		W = tf.get_variable('DenseW', [shape[1], output_dim],
+		W = tf.get_variable('denseW', [shape[1], output_dim],
 						initializer=tf.random_normal_initializer(stddev=stddev))
 		with tf.name_scope('W'):
 			variable_summaries(W)
-		b = tf.get_variable('Denseb', [output_dim],
+		b = tf.get_variable('denseb', [output_dim],
 							initializer=tf.zeros_initializer())
 		with tf.name_scope('b'):
 			variable_summaries(b)
@@ -157,8 +154,7 @@ def Dense(input, output_dim, stddev=0.02, name='dense'):
 def BatchNormalization(input, name='bn'):
 	return tf.contrib.layers.batch_norm(input, center=True, scale=True, decay=0.9, is_training=True, updates_collections=None, epsilon=1e-5)	
 	
-def LeakyReLU(input, leak=0.4, name='lrelu'):
-	
+def LeakyReLU(input, leak=0.6, name='lrelu'):
 	return tf.maximum(input, leak*input, name='LeakyRelu')
 
 def Discriminator(X, reuse=False, name='d'):
@@ -167,27 +163,28 @@ def Discriminator(X, reuse=False, name='d'):
 		X = gaussian_noise_layer(X, 0.2)
 		if len(X.get_shape()) > 2:
 			# X: -1, 32, 32, 4
-			D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='Disc_conv1')
+			D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='conv1')
 		else:
 			D_reshaped = tf.reshape(X, [-1, 32, 32, 4])
-			D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='Disc_conv1')
+			D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='conv1')
 		D_h1 = LeakyReLU(D_conv1)
-		D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='Disc_conv2')
+		D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='conv2')
 		D_h2 = LeakyReLU(D_conv2)
 
 		D_h2_pooled = tf.nn.avg_pool(D_h2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-		D_conv3 = Conv2d(D_h2_pooled, output_dim=128, kernel=(3,3), name='Disc_conv3')
+		D_conv3 = Conv2d(D_h2_pooled, output_dim=128, kernel=(3,3), name='conv3')
 		D_h3 = LeakyReLU(D_conv3)
-		D_conv4 = Conv2d(D_h3, output_dim=256, kernel=(3,3), name='Disc_conv4')
+		D_conv4 = Conv2d(D_h3, output_dim=256, kernel=(3,3), name='conv4')
 		D_h4 = LeakyReLU(D_conv4)
 
 		D_h4_pooled = tf.nn.avg_pool(D_h4, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
 		D_r = tf.reshape(D_h4_pooled, [-1, 256])
 		D_h5 = tf.nn.dropout(D_r, 0.6)
-		D_h6 = Dense(D_h5, output_dim=1, name='Disc_h6')
-		return tf.nn.sigmoid(D_h6), D_h6, D_h4
+		D_h6 = Dense(D_h5, output_dim=1, name='dense')
+		preds = tf.nn.sigmoid(D_h6, name='predictions')
+		return preds, D_h6, D_h4
 
 def Generator(z, name='g'):
 
@@ -197,52 +194,52 @@ def Generator(z, name='g'):
 	# Then deconv with stride 2, 5x5 filters into 4*32*32
 	with tf.variable_scope(name):
 
-		G_1 = Dense(z, output_dim=1024*4*4, name='Gen_1')
+		G_1 = Dense(z, output_dim=1024*4*4, name='dense')
 		G_r1 = tf.reshape(G_1, [-1, 4, 4, 1024])
-		G_bn1 = BatchNormalization(G_r1, name='Gen_bn1')
+		G_bn1 = BatchNormalization(G_r1, name='dense_bn')
 		G_h1 = LeakyReLU(G_bn1)
-		with tf.name_scope('activation_1'):
+		with tf.name_scope('dense_activation'):
 			variable_summaries(G_h1)
 
-		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=BATCH_SIZE, name='Gen_conv2')
-		G_bn2 = BatchNormalization(G_conv2, name='Gen_bn2')
+		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=BATCH_SIZE, name='deconv1')
+		G_bn2 = BatchNormalization(G_conv2, name='deconv1_bn')
 		G_h2 = LeakyReLU(G_bn2)
-		with tf.name_scope('activation_2'):
+		with tf.name_scope('deconv1_activation'):
 			variable_summaries(G_h2)
 
-		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=BATCH_SIZE, name='Gen_conv3')
-		G_bn3 = BatchNormalization(G_conv3, name='Gen_bn3')
+		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=BATCH_SIZE, name='deconv2')
+		G_bn3 = BatchNormalization(G_conv3, name='deconv2_bn')
 		G_h3 = LeakyReLU(G_bn3)
-		with tf.name_scope('activation_3'):
+		with tf.name_scope('deconv2_activation'):
 			variable_summaries(G_h3)
 
-		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=BATCH_SIZE, name='Gen_conv4')
+		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=BATCH_SIZE, name='deconv3')
 		G_r4 = tf.reshape(G_conv4, [-1, 32*32*4]) # -1 is for batch size
 		tanh_layer = tf.nn.tanh(G_r4)
 		with tf.name_scope('tanh'):
 			variable_summaries(tanh_layer)
 		return tanh_layer
 
-X = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE])
-z = tf.placeholder(tf.float32, shape=[None, 100])
+X = tf.placeholder(tf.float32, shape=[None, IMAGE_SIZE], name="real_images_input")
+z = tf.placeholder(tf.float32, shape=[None, 100], name="generator_latent_space_input")
 
 G = Generator(z, 'Generator')
 D_real_prob, D_real_logits, feature_matching_real = Discriminator(X, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake = Discriminator(G, True, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake = Discriminator(G, True, 'Discriminator_reused')
 
-tf.summary.histogram("d_real_prob/activation", tf.identity(D_real_prob, 'd_real_prob'))
-tf.summary.histogram("d_fake_prob/activation", tf.identity(D_fake_prob, 'd_fake_prob'))
+tf.summary.histogram("d_real_prob", D_real_prob)
+tf.summary.histogram("d_fake_prob", D_fake_prob)
 
-D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.8)))) # one sided label smoothing
-D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)))
-D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)))
-feature_matching_loss = tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)) / (16 * 16)
+D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.8))), name="disc_real_cross_entropy") # one sided label smoothing
+D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)), name="disc_fake_cross_entropy")
+D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
+feature_matching_loss = tf.divide(tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)), (16 * 16), name="feature_matching_loss")
 
-D_loss = D_real + D_fake
-G_loss = D_fake_wrong + 0.2 * feature_matching_loss
+D_loss = tf.add(D_real, D_fake, "disc_loss")
+G_loss = tf.add(D_fake_wrong, 0.2 * feature_matching_loss, "generator_loss")
 
-tf.summary.scalar("D_real", D_real)
-tf.summary.scalar("D_fake", D_fake)
+tf.summary.scalar("D_real_loss", D_real)
+tf.summary.scalar("D_fake_loss", D_fake)
 tf.summary.scalar("feature_matching_loss", feature_matching_loss)
 tf.summary.scalar("G_loss", G_loss)
 
@@ -256,12 +253,11 @@ def train(loss_tensor, params, learning_rate, beta1):
 	for grad, var in grads:
 		if grad is not None:
 			tf.summary.histogram(var.op.name + "/gradient", grad)
-			tf.summary.histogram(var.op.name + "/gradient/sparsity", tf.nn.zero_fraction(grad))
 	return optimizer.apply_gradients(grads)
 
 
 D_solver = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
-G_solver = train(G_loss, g_params, learning_rate=1e-3, beta1=0.5)
+G_solver = train(G_loss, g_params, learning_rate=2e-4, beta1=0.5)
 
 def normalize_image_batches(image_batches):
 	normalized_batches = np.zeros(image_batches.shape)
