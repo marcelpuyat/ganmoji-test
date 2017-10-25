@@ -21,8 +21,8 @@ IMAGE_SIZE = 32*32*4
 image_filenames = []
 
 def get_image_filenames():
-	s = commands.getstatusoutput('ls small_data')
-	filenames = ['small_data/' + string for string in s[1].split()]
+	s = commands.getstatusoutput('ls medium_small_data')
+	filenames = ['medium_small_data/' + string for string in s[1].split()]
 	shuffle(filenames)
 	return filenames
 image_filenames = get_image_filenames() # Load all image filenames into memory
@@ -64,10 +64,9 @@ def denormalize_image(image):
 	return np.multiply(np.divide((1 + image), 2), 255)
 
 def plot(samples, D_loss, G_loss, epoch, total):
-	fig = plt.figure(figsize=(10, 5))
-	# First 4 columns are images, last 4 is for the loss
-	gs = gridspec.GridSpec(4, 8)
-	gs.update(wspace=0.05, hspace=0.05)
+	fig = plt.figure(figsize=(18, 18))
+	gs = gridspec.GridSpec(8, 8)
+	gs.update(wspace=0.06, hspace=0.06)
 	
 	# Plot losses in last 4 columns
 	ax = plt.subplot(gs[:, 4:])
@@ -81,17 +80,14 @@ def plot(samples, D_loss, G_loss, epoch, total):
 	for i, sample in enumerate(samples):
 		# need to convert sample from range -1,1 to 0 255
 		sample = denormalize_image(sample)
-		if i > 4* 4 - 1:
-			break
-		# Plot in the left half
-		ax = plt.subplot(gs[i % 4, int(i / 4)])
+		ax = plt.subplot(gs[i % 8, int(i / 8)])
 		plt.axis('off')
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		ax.set_aspect('equal')
 		plt.imshow(sample.reshape(32, 32, 4).astype(np.uint8))
 
-	plt.savefig('./output/' + str(epoch + 1) + '.png')
+	plt.savefig('./output/' + str(epoch + 1) + '.png', bbox_inches='tight')
 	print('./output/' + str(epoch + 1) + '.png')
 	plt.close()
 
@@ -100,8 +96,9 @@ def variable_summaries(var):
 	tf.summary.histogram(var.op.name, var)
 
 def gaussian_noise_layer(input_layer, std):
-	noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32) 
-	return tf.add(input_layer, noise, 'add_gaussian_noise')
+	noise = tf.random_normal(shape=tf.shape(input_layer), mean=0, stddev=std, dtype=tf.float32) 
+	# We need to clip values to be between -1 and 1
+	return tf.clip_by_value(tf.add(input_layer, noise), clip_value_min=-1, clip_value_max=1, name='add_gaussian_noise')
 
 def Conv2d(input, output_dim=64, kernel=(5, 5), strides=(2, 2), stddev=0.02, name='conv_2d'):
 	with tf.variable_scope(name):
@@ -154,7 +151,7 @@ def Dense(input, output_dim, stddev=0.02, name='dense'):
 def BatchNormalization(input, name='bn'):
 	return tf.contrib.layers.batch_norm(input, center=True, scale=True, decay=0.9, is_training=True, updates_collections=None, epsilon=1e-5)	
 	
-def LeakyReLU(input, leak=0.6, name='lrelu'):
+def LeakyReLU(input, leak=0.2, name='lrelu'):
 	return tf.maximum(input, leak*input, name='LeakyRelu')
 
 def minibatch(inputs, num_kernels=32, kernel_dim=3):
@@ -175,10 +172,22 @@ def minibatch(inputs, num_kernels=32, kernel_dim=3):
 		abs_diffs = tf.reduce_sum(tf.abs(diffs), 2) + eps
 		return tf.reduce_sum(tf.exp(-abs_diffs), 2)
 
-def Discriminator(X, reuse=False, name='d'):
-	# 2 conv3s, avg pool. then 2 conv3s, avg pool.
+def Discriminator(X, instance_noise_std, reuse=False, name='d'):
+	# Architecture:
+	# 	Add noise
+	# 	Conv3x3
+	# 	Minibatch discrim computed (sent FC layer at the end)
+	# 	Conv3x3
+	# 	AvgPool
+	# 	Conv3x3
+	# 	Conv3x3
+	# 	AvgPool
+	# 	Then concat minibatch discrim with AvgPool output, each with separate dropout
+	# 	FC layer
+	# 	Sigmoid
 	with tf.variable_scope(name, reuse=reuse):
-		X = gaussian_noise_layer(X, 0.2)
+		# Decaying noise
+		X = gaussian_noise_layer(X, instance_noise_std)
 		if len(X.get_shape()) > 2:
 			# X: -1, 32, 32, 4
 			D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='conv1')
@@ -203,18 +212,26 @@ def Discriminator(X, reuse=False, name='d'):
 		D_h4_pooled = tf.nn.avg_pool(D_h4, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
 		D_r = tf.reshape(D_h4_pooled, [BATCH_SIZE, 256])
-		D_r_with_minibatch_discrim = tf.concat([D_r, minibatch_features], 1)
-		D_h5 = tf.nn.dropout(D_r_with_minibatch_discrim, 0.6)
-		D_h6 = Dense(D_h5, output_dim=1, name='dense')
+
+		# Apply strong dropout on minibatch features because we care less about it compared to image features
+		minibatch_features_dropped_out = tf.nn.dropout(minibatch_features, 0.2)
+
+		# Only a bit of dropout for image features to prevent overfitting
+		D_r_dropped_out = tf.nn.dropout(D_r, 0.7)
+
+		D_5 = tf.concat([D_r_dropped_out, minibatch_features_dropped_out], 1)
+
+		D_h6 = Dense(D_5, output_dim=1, name='dense')
 		preds = tf.nn.sigmoid(D_h6, name='predictions')
 		return preds, D_h6, D_h4, minibatch_features
 
 def Generator(z, name='g'):
-
-	# Project to 1024*4*4 then reshape
-	# Then deconv with stride 2, 5x5 filters into 512*8*8
-	# Then deconv with stride 2, 5x5 filters into 256*16*16
-	# Then deconv with stride 2, 5x5 filters into 4*32*32
+	# Architecture:
+	# 	Project to 1024*4*4 then reshape, then BN
+	# 	Then deconv with stride 2, 5x5 filters into 512*8*8, then BN
+	# 	Then deconv with stride 2, 5x5 filters into 256*16*16, then BN
+	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
+	#   tanh
 	with tf.variable_scope(name):
 
 		G_1 = Dense(z, output_dim=1024*4*4, name='dense')
@@ -237,7 +254,7 @@ def Generator(z, name='g'):
 			variable_summaries(G_h3)
 
 		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=BATCH_SIZE, name='deconv3')
-		G_r4 = tf.reshape(G_conv4, [BATCH_SIZE, 32*32*4]) # -1 is for batch size
+		G_r4 = tf.reshape(G_conv4, [BATCH_SIZE, 32*32*4])
 		tanh_layer = tf.nn.tanh(G_r4)
 		with tf.name_scope('tanh'):
 			variable_summaries(tanh_layer)
@@ -245,22 +262,34 @@ def Generator(z, name='g'):
 
 X = tf.placeholder(tf.float32, shape=[BATCH_SIZE, IMAGE_SIZE], name="real_images_input")
 z = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 100], name="generator_latent_space_input")
+instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_std")
 
 G = Generator(z, 'Generator')
-D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = Discriminator(X, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = Discriminator(G, True, 'Discriminator')
+D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = Discriminator(X, instance_noise_std, False, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = Discriminator(G, instance_noise_std, True, 'Discriminator')
 
 tf.summary.histogram("d_real_prob", D_real_prob)
 tf.summary.histogram("d_fake_prob", D_fake_prob)
 
-D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.8))), name="disc_real_cross_entropy") # one sided label smoothing
+D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.9))), name="disc_real_cross_entropy") # one sided label smoothing
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)), name="disc_fake_cross_entropy")
 D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
+
+# This is divided by 16*16 because that's dimension of the intermediate feature we pull out of D
 feature_matching_loss = tf.divide(tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)), (float(16) * 16), name="feature_matching_loss")
 
 D_loss = tf.add(D_real, D_fake, "disc_loss")
+
+# Commented out: Using minibatch similarity in the loss function. Too difficult to decide exactly how to weight this.
 # Minibatch_similarity_loss = tf.nn.l2_loss(minibatch_features_real, minibatch_features_fake, "minibatch_similarity_loss")
-G_loss = tf.add(D_fake_wrong, (0.1 * feature_matching_loss), "generator_loss")
+
+
+# Generator tries to maximize log(D_fake), and I incorporate Feature Matching into the loss function.
+# Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
+# 0.1 was decided upon via trial/error 
+# 
+# Actually, for now, no feature matching. Was quite difficult maintaining stability when combining two things in the loss function
+G_loss = tf.identity(D_fake_wrong, "generator_loss")
 
 tf.summary.scalar("D_real_loss", D_real)
 tf.summary.scalar("D_fake_loss", D_fake)
@@ -268,6 +297,7 @@ tf.summary.scalar("feature_matching_loss", feature_matching_loss)
 tf.summary.histogram("minibatch_similarity_real", minibatch_similarity_real)
 tf.summary.histogram("minibatch_similarity_fake", minibatch_similarity_fake)
 tf.summary.scalar("G_loss", G_loss)
+tf.summary.scalar("instance_noise_std", instance_noise_std)
 
 vars = tf.trainable_variables()
 d_params = [v for v in vars if v.name.startswith('Discriminator/')]
@@ -281,15 +311,27 @@ def train(loss_tensor, params, learning_rate, beta1):
 			tf.summary.histogram(var.op.name + "/gradient", grad)
 	return optimizer.apply_gradients(grads)
 
+# Learning rates decided upon by trial/error
+disc_optimizer = train(D_loss, d_params, learning_rate=5e-4, beta1=0.5)
+generator_optimizer = train(G_loss, g_params, learning_rate=1e-3, beta1=0.5)
 
-D_solver = train(D_loss, d_params, learning_rate=2e-3, beta1=0.5)
-G_solver = train(G_loss, g_params, learning_rate=2e-3, beta1=0.5)
-
-def normalize_image_batches(image_batches):
-	normalized_batches = np.zeros(image_batches.shape)
-	for idx, batch in enumerate(image_batches):
+# Convert images in batch from having values [0,255] to (-1,1)
+def normalize_image_batch(image_batch):
+	normalized_batches = np.zeros(image_batch.shape)
+	for idx, batch in enumerate(image_batch):
 		normalized_batches[idx] = np.multiply(2, np.divide(batch, float(255))) - 1
 	return normalized_batches
+
+def get_instance_noise_std(iters_run):
+	# Instance noise, motivated by: http://www.inference.vc/instance-noise-a-trick-for-stabilising-gan-training/
+	# Heuristic: Values are probably best determined by seeing how identifiable
+	# your images are with certain levels of noise. Here, I am starting off
+	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
+	INITIAL_NOISE_STD = 0.3
+	LAST_ITER_WITH_NOISE = 1000
+	if iters_run >= LAST_ITER_WITH_NOISE:
+		return 0.0
+	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
 
 with tf.Session() as sess:
 	merged = tf.summary.merge_all()
@@ -304,16 +346,18 @@ with tf.Session() as sess:
 	for e in range(EPOCHS):
 
 		for i in range(ITERATIONS):
+
+			instance_noise_std_value = get_instance_noise_std(e*ITERATIONS + i)
+
 			x = get_next_image_batch(BATCH_SIZE)
-			x = normalize_image_batches(x)
+			x = normalize_image_batch(x)
 
 			rand = np.random.uniform(0., 1., size=[BATCH_SIZE, 100]).astype(np.float32)
-			_, D_loss_curr = sess.run([D_solver, D_loss], {X: x, z: rand})
+			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value}
+			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
-			_, G_loss_curr = sess.run([G_solver, G_loss], {X: x, z: rand})
-			summary, _, G_loss_curr = sess.run([merged, G_solver, G_loss], {X: x, z: rand})
-
-			generated_images = sess.run(G, {z: rand})
+			_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
+			summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
 
 			train_writer.add_summary(summary, e*ITERATIONS + i + 1)
 
