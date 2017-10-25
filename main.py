@@ -14,17 +14,16 @@ import commands
 import time
 import os
 
+from ops import *
+from utils import *
+import config
+
 ITERATIONS = 100
-BATCH_SIZE = 64
 EPOCHS = 1000
-IMAGE_SIZE = 32*32*4
 STEPS_PER_SUMMARY = 5
 STEPS_PER_IMAGE_SAMPLE = 10
 STEPS_PER_SAVE = 100
 
-MODEL_NAME = "DCGAN.model"
-MODEL_DIR = "./models"
-CHECKPOINT_DIR = "checkpoint"
 image_filenames = []
 
 def get_image_filenames():
@@ -43,7 +42,7 @@ def get_next_image_batch(batch_size):
 	global curr_image_idx
 	global image_filenames
 
-	batch = np.zeros(shape=(batch_size, IMAGE_SIZE))
+	batch = np.zeros(shape=(batch_size, config.IMAGE_SIZE))
 	for i in range(batch_size):
 
 		# Keep looping til we get an image. Sometimes we'll find an image with an invalid size.
@@ -62,13 +61,10 @@ def get_next_image_batch(batch_size):
 				curr_image_idx += 1
 				continue
 
-			batch[i] = pix.reshape([IMAGE_SIZE])
+			batch[i] = pix.reshape([config.IMAGE_SIZE])
 			curr_image_idx += 1
 			break
 	return batch
-
-def denormalize_image(image):
-	return np.multiply(np.divide((1 + image), 2), 255)
 
 def save_samples(samples, image_num):
 	fig = plt.figure(figsize=(18, 18))
@@ -90,87 +86,6 @@ def save_samples(samples, image_num):
 	print('New samples: ./output/' + str(image_num) + '.png')
 	plt.close()
 
-def variable_summaries(var):
-	"""Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-	tf.summary.histogram(var.op.name, var)
-
-def gaussian_noise_layer(input_layer, std):
-	noise = tf.random_normal(shape=tf.shape(input_layer), mean=0, stddev=std, dtype=tf.float32) 
-	# We need to clip values to be between -1 and 1
-	return tf.clip_by_value(tf.add(input_layer, noise), clip_value_min=-1, clip_value_max=1, name='add_gaussian_noise')
-
-def Conv2d(input, output_dim=64, kernel=(5, 5), strides=(2, 2), stddev=0.02, name='conv_2d'):
-	with tf.variable_scope(name):
-		W = tf.get_variable('convW', [kernel[0], kernel[1], input.get_shape()[-1], output_dim],
-							initializer=tf.truncated_normal_initializer(stddev=stddev))
-		with tf.name_scope('W'):
-			variable_summaries(W)
-		b = tf.get_variable('convb', [output_dim], initializer=tf.zeros_initializer())
-		with tf.name_scope('b'):
-			variable_summaries(b)
-	    
-
-		return tf.nn.conv2d(input, W, strides=[1, strides[0], strides[1], 1], padding='SAME') + b
-
-def Deconv2d(input, output_dim, batch_size, kernel=(5, 5), strides=(2, 2), stddev=0.02, name='deconv_2d'):
-	with tf.variable_scope(name):
-		W = tf.get_variable('deconvW', [kernel[0], kernel[1], output_dim, input.get_shape()[-1]], initializer=tf.truncated_normal_initializer(stddev=stddev))
-		with tf.name_scope('W'):
-			variable_summaries(W)
-		b = tf.get_variable('deconvb', [output_dim], initializer=tf.zeros_initializer())
-		with tf.name_scope('b'):
-			variable_summaries(b)
-
-		input_shape = input.get_shape().as_list()
-		output_shape = [batch_size,
-						int(input_shape[1] * strides[0]),
-						int(input_shape[2] * strides[1]),
-						output_dim]
-
-		deconv = tf.nn.conv2d_transpose(input, W, output_shape=output_shape,
-										strides=[1, strides[0], strides[1], 1])
-	
-		return deconv + b
-
-def Dense(input, output_dim, stddev=0.02, name='dense'):
-	with tf.variable_scope(name):
-	    
-		shape = input.get_shape()
-		W = tf.get_variable('denseW', [shape[1], output_dim],
-						initializer=tf.random_normal_initializer(stddev=stddev))
-		with tf.name_scope('W'):
-			variable_summaries(W)
-		b = tf.get_variable('denseb', [output_dim],
-							initializer=tf.zeros_initializer())
-		with tf.name_scope('b'):
-			variable_summaries(b)
-	    
-		return tf.matmul(input, W) + b
-
-def BatchNormalization(input, name='bn'):
-	return tf.contrib.layers.batch_norm(input, center=True, scale=True, decay=0.9, is_training=True, updates_collections=None, epsilon=1e-5)	
-	
-def LeakyReLU(input, leak=0.2, name='lrelu'):
-	return tf.maximum(input, leak*input, name='LeakyRelu')
-
-def minibatch(inputs, num_kernels=32, kernel_dim=3):
-	with tf.variable_scope('minibatch_discrim'):
-		W = tf.get_variable("W",
-							shape=[inputs.get_shape()[1], num_kernels*kernel_dim],
-							initializer=tf.random_normal_initializer(stddev=0.02))
-		b = tf.get_variable("b",
-							shape=[num_kernels*kernel_dim],
-							initializer=tf.constant_initializer(0.0))
-		variable_summaries(W)
-		variable_summaries(b)
-		x = tf.matmul(inputs, W) + b
-		activation = tf.reshape(x, (-1, num_kernels, kernel_dim))
-		diffs = tf.expand_dims(activation, 3) - tf.expand_dims(
-			tf.transpose(activation, [1, 2, 0]), 0)
-		eps = tf.expand_dims(np.eye(int(inputs.get_shape()[0]), dtype=np.float32), 1)
-		abs_diffs = tf.reduce_sum(tf.abs(diffs), 2) + eps
-		return tf.reduce_sum(tf.exp(-abs_diffs), 2)
-
 def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 	# Architecture:
 	# 	Add noise
@@ -188,10 +103,10 @@ def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 			# X: -1, 32, 32, 4
 			D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='conv1')
 		else:
-			D_reshaped = tf.reshape(X, [BATCH_SIZE, 32, 32, 4])
+			D_reshaped = tf.reshape(X, [config.BATCH_SIZE, 32, 32, 4])
 			D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='conv1')
 
-		D_conv1_reshaped = tf.reshape(D_conv1, [BATCH_SIZE, -1])
+		D_conv1_reshaped = tf.reshape(D_conv1, [config.BATCH_SIZE, -1])
 		minibatch_features = minibatch(D_conv1_reshaped) # Saved for the end
 
 		D_bn1 = BatchNormalization(D_conv1, name='conv_bn1')
@@ -206,7 +121,7 @@ def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 		D_bn4 = BatchNormalization(D_conv4, name='conv_bn4')
 		D_h4 = LeakyReLU(D_bn4)
 
-		D_r = tf.reshape(D_h4, [BATCH_SIZE, 1024])
+		D_r = tf.reshape(D_h4, [config.BATCH_SIZE, 1024])
 
 		# Apply strong dropout on minibatch features because we care less about it compared to image features
 		minibatch_features_dropped_out = tf.nn.dropout(minibatch_features, 0.4)
@@ -230,33 +145,33 @@ def Generator(z, name='g'):
 	with tf.variable_scope(name):
 
 		G_1 = Dense(z, output_dim=1024*4*4, name='dense')
-		G_r1 = tf.reshape(G_1, [BATCH_SIZE, 4, 4, 1024])
+		G_r1 = tf.reshape(G_1, [config.BATCH_SIZE, 4, 4, 1024])
 		G_bn1 = BatchNormalization(G_r1, name='dense_bn')
 		G_h1 = tf.nn.relu(G_bn1)
 		with tf.name_scope('dense_activation'):
 			variable_summaries(G_h1)
 
-		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=BATCH_SIZE, name='deconv1')
+		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=config.BATCH_SIZE, name='deconv1')
 		G_bn2 = BatchNormalization(G_conv2, name='deconv1_bn')
 		G_h2 = tf.nn.relu(G_bn2)
 		with tf.name_scope('deconv1_activation'):
 			variable_summaries(G_h2)
 
-		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=BATCH_SIZE, name='deconv2')
+		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=config.BATCH_SIZE, name='deconv2')
 		G_bn3 = BatchNormalization(G_conv3, name='deconv2_bn')
 		G_h3 = tf.nn.relu(G_bn3)
 		with tf.name_scope('deconv2_activation'):
 			variable_summaries(G_h3)
 
-		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=BATCH_SIZE, name='deconv3')
-		G_r4 = tf.reshape(G_conv4, [BATCH_SIZE, 32*32*4])
+		G_conv4 = Deconv2d(G_h3, output_dim=4, batch_size=config.BATCH_SIZE, name='deconv3')
+		G_r4 = tf.reshape(G_conv4, [config.BATCH_SIZE, 32*32*4])
 		tanh_layer = tf.nn.tanh(G_r4)
 		with tf.name_scope('tanh'):
 			variable_summaries(tanh_layer)
 		return tanh_layer
 
-X = tf.placeholder(tf.float32, shape=[BATCH_SIZE, IMAGE_SIZE], name="real_images_input")
-z = tf.placeholder(tf.float32, shape=[BATCH_SIZE, 100], name="generator_latent_space_input")
+X = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.IMAGE_SIZE], name="real_images_input")
+z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, 100], name="generator_latent_space_input")
 instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_std")
 
 G = Generator(z, 'Generator')
@@ -310,13 +225,6 @@ def train(loss_tensor, params, learning_rate, beta1):
 disc_optimizer = train(D_loss, d_params, learning_rate=5e-4, beta1=0.5)
 generator_optimizer = train(G_loss, g_params, learning_rate=1e-3, beta1=0.5)
 
-# Convert images in batch from having values [0,255] to (-1,1)
-def normalize_image_batch(image_batch):
-	normalized_batches = np.zeros(image_batch.shape)
-	for idx, batch in enumerate(image_batch):
-		normalized_batches[idx] = np.multiply(2, np.divide(batch, float(255))) - 1
-	return normalized_batches
-
 def get_instance_noise_std(iters_run):
 	# Instance noise, motivated by: http://www.inference.vc/instance-noise-a-trick-for-stabilising-gan-training/
 	# Heuristic: Values are probably best determined by seeing how identifiable
@@ -334,13 +242,13 @@ saver = tf.train.Saver()
 def save(checkpoint_dir, curr_step, sess):
 	global saver
 	print(" [*] Saving model at step: " + str(curr_step))
-	checkpoint_dir = os.path.join(checkpoint_dir, MODEL_DIR)
+	checkpoint_dir = os.path.join(checkpoint_dir, config.MODEL_DIR)
 
 	if not os.path.exists(checkpoint_dir):
 		os.makedirs(checkpoint_dir)
 
 	saver.save(sess,
-				os.path.join(checkpoint_dir, MODEL_NAME),
+				os.path.join(checkpoint_dir, config.MODEL_NAME),
 				global_step=curr_step)
 	print(" [*] Successfully saved model")
 
@@ -348,7 +256,7 @@ def load(checkpoint_dir, sess):
 	global saver
 	import re
 	print(" [*] Reading checkpoints...")
-	checkpoint_dir = os.path.join(CHECKPOINT_DIR, MODEL_DIR)
+	checkpoint_dir = os.path.join(config.CHECKPOINT_DIR, config.MODEL_DIR)
 
 	ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
 	if ckpt and ckpt.model_checkpoint_path:
@@ -365,14 +273,11 @@ with tf.Session() as sess:
 	merged = tf.summary.merge_all()
 	train_writer = tf.summary.FileWriter('tensorboard/',
 										 sess.graph)
-
 	sess.run(tf.global_variables_initializer())
 
-	D_loss_vals = []
-	G_loss_vals = []
-
+	# Try to load model
 	curr_step = 0
-	could_load, checkpoint_counter = load(CHECKPOINT_DIR, sess)
+	could_load, checkpoint_counter = load(config.CHECKPOINT_DIR, sess)
 	if could_load:
 		curr_step = checkpoint_counter
 		print(" [*] Load SUCCESS")
@@ -380,23 +285,20 @@ with tf.Session() as sess:
 		print(" [!] Load failed...")
 
 	for e in range(EPOCHS):
-
 		for _ in range(ITERATIONS):
 
 			instance_noise_std_value = get_instance_noise_std(curr_step)
 
-			x = get_next_image_batch(BATCH_SIZE)
+			x = get_next_image_batch(config.BATCH_SIZE)
 			x = normalize_image_batch(x)
 
-			rand = np.random.uniform(0., 1., size=[BATCH_SIZE, 100]).astype(np.float32)
+			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, 100]).astype(np.float32)
 			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
+			# Run generator twice
 			_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
 			summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
-
-			D_loss_vals.append(D_loss_curr)
-			G_loss_vals.append(G_loss_curr)
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
 			sys.stdout.flush()
@@ -409,7 +311,7 @@ with tf.Session() as sess:
 				save_samples(generated_samples, curr_step / STEPS_PER_IMAGE_SAMPLE)
 
 			if curr_step > 0 and curr_step % STEPS_PER_SAVE == 0:
-				save(CHECKPOINT_DIR, curr_step, sess)
+				save(config.CHECKPOINT_DIR, curr_step, sess)
 
 			if curr_step > 0 and curr_step % STEPS_PER_SUMMARY == 0:
 				train_writer.add_summary(summary, curr_step)
