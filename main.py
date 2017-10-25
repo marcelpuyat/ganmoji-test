@@ -12,12 +12,19 @@ from PIL import Image
 import scipy.misc
 import commands
 import time
+import os
 
-ITERATIONS = 10
+ITERATIONS = 100
 BATCH_SIZE = 64
-EPOCHS = 100000
+EPOCHS = 1000
 IMAGE_SIZE = 32*32*4
+STEPS_PER_SUMMARY = 5
+STEPS_PER_IMAGE_SAMPLE = 10
+STEPS_PER_SAVE = 100
 
+MODEL_NAME = "DCGAN.model"
+MODEL_DIR = "./models"
+CHECKPOINT_DIR = "checkpoint"
 image_filenames = []
 
 def get_image_filenames():
@@ -63,18 +70,10 @@ def get_next_image_batch(batch_size):
 def denormalize_image(image):
 	return np.multiply(np.divide((1 + image), 2), 255)
 
-def plot(samples, D_loss, G_loss, epoch, total):
+def save_samples(samples, image_num):
 	fig = plt.figure(figsize=(18, 18))
 	gs = gridspec.GridSpec(8, 8)
 	gs.update(wspace=0.06, hspace=0.06)
-	
-	# Plot losses in last 4 columns
-	ax = plt.subplot(gs[:, 4:])
-	ax.plot(D_loss, label="discriminator's loss", color='b')
-	ax.plot(G_loss, label="generator's loss", color='r')
-	ax.set_xlim([0, total])
-	ax.yaxis.tick_right()
-	ax.legend()
 
 	# Generate images
 	for i, sample in enumerate(samples):
@@ -87,8 +86,8 @@ def plot(samples, D_loss, G_loss, epoch, total):
 		ax.set_aspect('equal')
 		plt.imshow(sample.reshape(32, 32, 4).astype(np.uint8))
 
-	plt.savefig('./output/' + str(epoch + 1) + '.png', bbox_inches='tight')
-	print('./output/' + str(epoch + 1) + '.png')
+	plt.savefig('./output/' + str(image_num) + '.png', bbox_inches='tight')
+	print('New samples: ./output/' + str(image_num) + '.png')
 	plt.close()
 
 def variable_summaries(var):
@@ -175,14 +174,11 @@ def minibatch(inputs, num_kernels=32, kernel_dim=3):
 def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 	# Architecture:
 	# 	Add noise
-	# 	Conv3x3
+	# 	Conv3x3, BN, ReLU
 	# 	Minibatch discrim computed (sent FC layer at the end)
-	# 	Conv3x3
-	# 	AvgPool
-	# 	Conv3x3
-	# 	Conv3x3
-	# 	AvgPool
-	# 	Then concat minibatch discrim with AvgPool output, each with separate dropout
+	# 	Conv3x3, BN, ReLU
+	# 	Conv3x3, BN, ReLU
+	# 	Conv3x3, BN, ReLU
 	# 	FC layer
 	# 	Sigmoid
 	with tf.variable_scope(name, reuse=reuse):
@@ -197,27 +193,26 @@ def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 
 		D_conv1_reshaped = tf.reshape(D_conv1, [BATCH_SIZE, -1])
 		minibatch_features = minibatch(D_conv1_reshaped) # Saved for the end
-		D_h1 = LeakyReLU(D_conv1)
 
+		D_bn1 = BatchNormalization(D_conv1, name='conv_bn1')
+		D_h1 = LeakyReLU(D_bn1)
 		D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='conv2')
-		D_h2 = LeakyReLU(D_conv2)
-
-		D_h2_pooled = tf.nn.avg_pool(D_h2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
-
-		D_conv3 = Conv2d(D_h2_pooled, output_dim=128, kernel=(3,3), name='conv3')
-		D_h3 = LeakyReLU(D_conv3)
+		D_bn2 = BatchNormalization(D_conv2, name='conv_bn2')
+		D_h2 = LeakyReLU(D_bn2)
+		D_conv3 = Conv2d(D_h2, output_dim=128, kernel=(3,3), name='conv3')
+		D_bn3 = BatchNormalization(D_conv3, name='conv_bn3')
+		D_h3 = LeakyReLU(D_bn3)
 		D_conv4 = Conv2d(D_h3, output_dim=256, kernel=(3,3), name='conv4')
-		D_h4 = LeakyReLU(D_conv4)
+		D_bn4 = BatchNormalization(D_conv4, name='conv_bn4')
+		D_h4 = LeakyReLU(D_bn4)
 
-		D_h4_pooled = tf.nn.avg_pool(D_h4, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
-
-		D_r = tf.reshape(D_h4_pooled, [BATCH_SIZE, 256])
+		D_r = tf.reshape(D_h4, [BATCH_SIZE, 1024])
 
 		# Apply strong dropout on minibatch features because we care less about it compared to image features
-		minibatch_features_dropped_out = tf.nn.dropout(minibatch_features, 0.2)
+		minibatch_features_dropped_out = tf.nn.dropout(minibatch_features, 0.4)
 
 		# Only a bit of dropout for image features to prevent overfitting
-		D_r_dropped_out = tf.nn.dropout(D_r, 0.7)
+		D_r_dropped_out = tf.nn.dropout(D_r, 0.8)
 
 		D_5 = tf.concat([D_r_dropped_out, minibatch_features_dropped_out], 1)
 
@@ -237,19 +232,19 @@ def Generator(z, name='g'):
 		G_1 = Dense(z, output_dim=1024*4*4, name='dense')
 		G_r1 = tf.reshape(G_1, [BATCH_SIZE, 4, 4, 1024])
 		G_bn1 = BatchNormalization(G_r1, name='dense_bn')
-		G_h1 = LeakyReLU(G_bn1)
+		G_h1 = tf.nn.relu(G_bn1)
 		with tf.name_scope('dense_activation'):
 			variable_summaries(G_h1)
 
 		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=BATCH_SIZE, name='deconv1')
 		G_bn2 = BatchNormalization(G_conv2, name='deconv1_bn')
-		G_h2 = LeakyReLU(G_bn2)
+		G_h2 = tf.nn.relu(G_bn2)
 		with tf.name_scope('deconv1_activation'):
 			variable_summaries(G_h2)
 
 		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=BATCH_SIZE, name='deconv2')
 		G_bn3 = BatchNormalization(G_conv3, name='deconv2_bn')
-		G_h3 = LeakyReLU(G_bn3)
+		G_h3 = tf.nn.relu(G_bn3)
 		with tf.name_scope('deconv2_activation'):
 			variable_summaries(G_h3)
 
@@ -271,7 +266,7 @@ D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = D
 tf.summary.histogram("d_real_prob", D_real_prob)
 tf.summary.histogram("d_fake_prob", D_fake_prob)
 
-D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=(tf.ones_like(D_real_logits) * (0.9))), name="disc_real_cross_entropy") # one sided label smoothing
+D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones_like(D_real_logits)), name="disc_real_cross_entropy")
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)), name="disc_fake_cross_entropy")
 D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
 
@@ -328,10 +323,43 @@ def get_instance_noise_std(iters_run):
 	# your images are with certain levels of noise. Here, I am starting off
 	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
 	INITIAL_NOISE_STD = 0.3
-	LAST_ITER_WITH_NOISE = 1000
+	LAST_ITER_WITH_NOISE = 300
 	if iters_run >= LAST_ITER_WITH_NOISE:
 		return 0.0
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
+
+
+
+saver = tf.train.Saver()
+def save(checkpoint_dir, curr_step, sess):
+	global saver
+	print(" [*] Saving model at step: " + str(curr_step))
+	checkpoint_dir = os.path.join(checkpoint_dir, MODEL_DIR)
+
+	if not os.path.exists(checkpoint_dir):
+		os.makedirs(checkpoint_dir)
+
+	saver.save(sess,
+				os.path.join(checkpoint_dir, MODEL_NAME),
+				global_step=curr_step)
+	print(" [*] Successfully saved model")
+
+def load(checkpoint_dir, sess):
+	global saver
+	import re
+	print(" [*] Reading checkpoints...")
+	checkpoint_dir = os.path.join(CHECKPOINT_DIR, MODEL_DIR)
+
+	ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+	if ckpt and ckpt.model_checkpoint_path:
+		ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+		saver.restore(sess, os.path.join(checkpoint_dir, ckpt_name))
+		curr_step = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
+		print(" [*] Successfully read {}".format(ckpt_name))
+		return True, curr_step
+	else:
+		print(" [*] Failed to find a checkpoint")
+	return False, 0
 
 with tf.Session() as sess:
 	merged = tf.summary.merge_all()
@@ -343,11 +371,19 @@ with tf.Session() as sess:
 	D_loss_vals = []
 	G_loss_vals = []
 
+	curr_step = 0
+	could_load, checkpoint_counter = load(CHECKPOINT_DIR, sess)
+	if could_load:
+		curr_step = checkpoint_counter
+		print(" [*] Load SUCCESS")
+	else:
+		print(" [!] Load failed...")
+
 	for e in range(EPOCHS):
 
-		for i in range(ITERATIONS):
+		for _ in range(ITERATIONS):
 
-			instance_noise_std_value = get_instance_noise_std(e*ITERATIONS + i)
+			instance_noise_std_value = get_instance_noise_std(curr_step)
 
 			x = get_next_image_batch(BATCH_SIZE)
 			x = normalize_image_batch(x)
@@ -359,13 +395,22 @@ with tf.Session() as sess:
 			_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
 			summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
 
-			train_writer.add_summary(summary, e*ITERATIONS + i + 1)
-
 			D_loss_vals.append(D_loss_curr)
 			G_loss_vals.append(G_loss_curr)
 
-			sys.stdout.write("\r%d / %d: %f, %f" % (i, ITERATIONS, D_loss_curr, G_loss_curr))
+			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
 			sys.stdout.flush()
 
-		data = sess.run(G, {z: rand})
-		plot(data, D_loss_vals, G_loss_vals, e, EPOCHS * ITERATIONS)
+			curr_step += 1
+
+			if curr_step > 0 and curr_step % STEPS_PER_IMAGE_SAMPLE == 0:
+				# Note that these samples have "pixels" in the range (-1,1)
+				generated_samples = sess.run(G, {z: rand})
+				save_samples(generated_samples, curr_step / STEPS_PER_IMAGE_SAMPLE)
+
+			if curr_step > 0 and curr_step % STEPS_PER_SAVE == 0:
+				save(CHECKPOINT_DIR, curr_step, sess)
+
+			if curr_step > 0 and curr_step % STEPS_PER_SUMMARY == 0:
+				train_writer.add_summary(summary, curr_step)
+
