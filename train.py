@@ -16,7 +16,7 @@ instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_s
 
 G = Generator(z, 'Generator')
 D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = Discriminator(X, instance_noise_std, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake= Discriminator(G, instance_noise_std, True, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = Discriminator(G, instance_noise_std, True, 'Discriminator')
 
 tf.summary.histogram("d_real_prob", D_real_prob)
 tf.summary.histogram("d_fake_prob", D_fake_prob)
@@ -28,11 +28,21 @@ D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_f
 # This is divided by 16*16 because that's dimension of the intermediate feature we pull out of D
 feature_matching_loss = tf.divide(tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)), (float(16) * 16), name="feature_matching_loss")
 
+# WGAN-GP gradient penalty
+lambd = 10
+alpha = tf.random_uniform(
+	shape=[config.BATCH_SIZE,1], 
+	minval=0.,
+	maxval=1.
+)
+X_hat = alpha*X + (1-alpha)*G
+D_hat,_,_,_ = Discriminator(X_hat, instance_noise_std, True, 'Discriminator')
+gradients = tf.gradients(D_hat, [X_hat])[0]
+slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
+gradient_penalty = tf.reduce_mean((slopes-1.)**2) * lambd
+
 D_loss = tf.add(D_real, D_fake, "disc_loss")
-
-# Commented out: Using minibatch similarity in the loss function. Too difficult to decide exactly how to weight this.
-# Minibatch_similarity_loss = tf.nn.l2_loss(minibatch_features_real, minibatch_features_fake, "minibatch_similarity_loss")
-
+D_loss += gradient_penalty
 
 # Generator tries to maximize log(D_fake), and I incorporate Feature Matching into the loss function.
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
@@ -43,6 +53,8 @@ G_loss = tf.identity(D_fake_wrong, "generator_loss")
 
 tf.summary.scalar("D_real_loss", D_real)
 tf.summary.scalar("D_fake_loss", D_fake)
+tf.summary.scalar("D_fake_wrong", D_fake_wrong)
+tf.summary.scalar("gradient_penalty", gradient_penalty)
 tf.summary.scalar("feature_matching_loss", feature_matching_loss)
 tf.summary.histogram("minibatch_similarity_real", minibatch_similarity_real)
 tf.summary.histogram("minibatch_similarity_fake", minibatch_similarity_fake)
@@ -64,6 +76,9 @@ def train(loss_tensor, params, learning_rate, beta1):
 # Learning rates decided upon by trial/error
 disc_optimizer = train(D_loss, d_params, learning_rate=5e-4, beta1=0.5)
 generator_optimizer = train(G_loss, g_params, learning_rate=1e-3, beta1=0.5)
+
+def get_perturbed_batch(minibatch):
+	return minibatch + 0.5 * minibatch.std() * np.random.random(minibatch.shape)
 
 def get_instance_noise_std(iters_run):
 	# Instance noise, motivated by: http://www.inference.vc/instance-noise-a-trick-for-stabilising-gan-training/

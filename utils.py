@@ -5,7 +5,9 @@ import os
 from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
 from random import shuffle
+import json
 import config
+import scipy.misc
 
 # Convert images in batch from having values [0,255] to (-1,1)
 def normalize_image_batch(image_batch):
@@ -21,16 +23,17 @@ def variable_summaries(var):
 def denormalize_image(image):
 	return np.multiply(np.divide((1 + image), 2), 255)
 
-image_filenames = []
+image_metadata = []
 
-def _get_image_filenames():
-	s = commands.getstatusoutput('ls medium_small_data')
-	filenames = ['medium_small_data/' + string for string in s[1].split()]
-	shuffle(filenames)
-	return filenames
-image_filenames = _get_image_filenames() # Load all image filenames into memory
+def get_image_metadata():
+	with open('emoji_images_high_quality_medium.json') as data_file:    
+		data = json.load(data_file)
+		shuffle(data)
+		return data
 
-def _get_pixels_for_filename(filename):
+image_metadata = get_image_metadata() # Load all image filenames into memory
+
+def get_pixels_for_filename(filename):
     img = scipy.misc.imread(filename, mode='RGBA')
     img = scipy.misc.imresize(img, [64, 64])
     return np.array(img)
@@ -38,9 +41,9 @@ def _get_pixels_for_filename(filename):
 curr_image_idx = 0
 def get_next_image_batch(batch_size):
 	global curr_image_idx
-	global image_filenames
+	global image_metadata
 
-	batch = np.zeros(shape=(batch_size, config.IMAGE_SIZE))
+	pixels_batch = np.zeros(shape=(batch_size, config.IMAGE_SIZE))
 	for i in range(batch_size):
 
 		# Keep looping til we get an image. Sometimes we'll find an image with an invalid size.
@@ -48,21 +51,27 @@ def get_next_image_batch(batch_size):
 		while True:
 
 			# Go back to the start, and then shuffle the images
-			if curr_image_idx >= len(image_filenames):
+			if curr_image_idx >= len(image_metadata):
 				curr_image_idx = 0
-				shuffle(image_filenames)
+				shuffle(image_metadata)
 			# Note that we don't store all pixels in memory bec of memory constraints
-			pix = _get_pixels_for_filename(image_filenames[curr_image_idx])
+
+			try: # Another hack bec the metadata has stale files that have been deleted
+				pix = get_pixels_for_filename(image_metadata[curr_image_idx]['filename'])
+			except Exception as e:
+				print(str(e))
+				curr_image_idx += 1
+				continue
 			if pix.shape != (64, 64, 4):
-				print('Invalid pixels shape for file ' + image_filenames[curr_image_idx] + ': ' + str(pix.shape))
+				print('Invalid pixels shape for file ' + image_metadata[curr_image_idx]['filename'] + ': ' + str(pix.shape))
 				# Skip this image
 				curr_image_idx += 1
 				continue
 
-			batch[i] = pix.reshape([config.IMAGE_SIZE])
+			pixels_batch[i] = pix.reshape([config.IMAGE_SIZE])
 			curr_image_idx += 1
 			break
-	return batch
+	return pixels_batch
 
 def save_samples(samples, image_num, is_test=False):
 	fig = plt.figure(figsize=(18, 18))

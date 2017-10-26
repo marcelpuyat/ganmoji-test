@@ -44,7 +44,7 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 		D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='conv1')
 
 	D_conv1_reshaped = tf.reshape(D_conv1, [config.BATCH_SIZE, -1])
-	minibatch_features = minibatch(D_conv1_reshaped) # Saved for the end
+	minibatch_features = minibatch(D_conv1_reshaped)
 
 	D_bn1 = BatchNormalization(D_conv1, name='conv_bn1')
 	D_h1 = LeakyReLU(D_bn1)
