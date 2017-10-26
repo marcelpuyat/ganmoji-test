@@ -1,18 +1,9 @@
 import tensorflow as tf
 import numpy as np
 np.set_printoptions(threshold='nan')
-from matplotlib import pyplot as plt
-import matplotlib.gridspec as gridspec
 import sys
 import warnings
 warnings.simplefilter('error', UserWarning)
-from random import shuffle
-import json
-from PIL import Image
-import scipy.misc
-import commands
-import time
-import os
 
 from ops import *
 from model import *
@@ -86,6 +77,7 @@ def get_instance_noise_std(iters_run):
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
 
 with tf.Session() as sess:
+	saver = tf.train.Saver()
 	merged = tf.summary.merge_all()
 	train_writer = tf.summary.FileWriter('tensorboard/',
 										 sess.graph)
@@ -93,7 +85,7 @@ with tf.Session() as sess:
 
 	# Try to load model
 	curr_step = 0
-	could_load, checkpoint_counter = utils.load(config.CHECKPOINT_DIR, sess)
+	could_load, checkpoint_counter = utils.load(config.CHECKPOINT_DIR, sess, saver)
 	if could_load:
 		curr_step = checkpoint_counter
 		print(" [*] Load SUCCESS")
@@ -127,7 +119,7 @@ with tf.Session() as sess:
 				utils.save_samples(generated_samples, curr_step / config.STEPS_PER_IMAGE_SAMPLE)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SAVE == 0:
-				utils.save(config.CHECKPOINT_DIR, curr_step, sess)
+				utils.save(config.CHECKPOINT_DIR, curr_step, sess, saver)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
 				train_writer.add_summary(summary, curr_step)

@@ -1,3 +1,7 @@
+import tensorflow as tf
+from ops import *
+import config
+
 def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 	# Architecture:
 	#   DiscriminatorBeforeFullyConnectedLayer plus:
@@ -68,13 +72,13 @@ def Generator(z, name='g'):
 	with tf.variable_scope(name):
 
 		G_1 = Dense(z, output_dim=1024*4*4, name='dense')
-		G_bn1 = BatchNormalization(G_1, name='dense_bn')
+		G_r1 = tf.reshape(G_1, [config.BATCH_SIZE, 4, 4, 1024])
+		G_bn1 = BatchNormalization(G_r1, name='dense_bn')
 		G_h1 = tf.nn.relu(G_bn1)
-		G_r1 = tf.reshape(G_h1, [config.BATCH_SIZE, 4, 4, 1024])
 		with tf.name_scope('dense_activation'):
-			variable_summaries(G_r1)
+			variable_summaries(G_h1)
 
-		G_conv2 = Deconv2d(G_r1, output_dim=512, batch_size=config.BATCH_SIZE, name='deconv1')
+		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=config.BATCH_SIZE, name='deconv1')
 		G_bn2 = BatchNormalization(G_conv2, name='deconv1_bn')
 		G_h2 = tf.nn.relu(G_bn2)
 		with tf.name_scope('deconv1_activation'):
@@ -87,12 +91,12 @@ def Generator(z, name='g'):
 			variable_summaries(G_h3)
 
 		G_conv4 = Deconv2d(G_h3, output_dim=128, batch_size=config.BATCH_SIZE, name='deconv3')
-		G_bn4 = BatchNormalization(G_conv4, name='deconv2_bn')
+		G_bn4 = BatchNormalization(G_conv4, name='deconv3_bn')
 		G_h4 = tf.nn.relu(G_bn4)
-		with tf.name_scope('deconv2_activation'):
+		with tf.name_scope('deconv3_activation'):
 			variable_summaries(G_h4)
 
-		G_conv5 = Deconv2d(G_h4, output_dim=4, batch_size=config.BATCH_SIZE, name='deconv3')
+		G_conv5 = Deconv2d(G_h4, output_dim=4, batch_size=config.BATCH_SIZE, name='deconv4')
 		G_r5 = tf.reshape(G_conv5, [config.BATCH_SIZE, 64*64*4])
 		tanh_layer = tf.nn.tanh(G_r5)
 		with tf.name_scope('tanh'):

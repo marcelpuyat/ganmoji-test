@@ -1,5 +1,11 @@
 import numpy as np
 import tensorflow as tf
+import commands
+import os
+from matplotlib import pyplot as plt
+import matplotlib.gridspec as gridspec
+from random import shuffle
+import config
 
 # Convert images in batch from having values [0,255] to (-1,1)
 def normalize_image_batch(image_batch):
@@ -58,13 +64,13 @@ def get_next_image_batch(batch_size):
 			break
 	return batch
 
-def save_samples(samples, image_num):
+def save_samples(samples, image_num, is_test=False):
 	fig = plt.figure(figsize=(18, 18))
 	gs = gridspec.GridSpec(8, 8)
 	gs.update(wspace=0.06, hspace=0.06)
 
 	# Generate images
-	for i, sample in enumerate(samples):
+	for i, sample in enumerate(samples[:64]):
 		# need to convert sample from range -1,1 to 0 255
 		sample = denormalize_image(sample)
 		ax = plt.subplot(gs[i % 8, int(i / 8)])
@@ -74,13 +80,15 @@ def save_samples(samples, image_num):
 		ax.set_aspect('equal')
 		plt.imshow(sample.reshape(64, 64, 4).astype(np.uint8))
 
-	plt.savefig('./output/' + str(image_num) + '.png', bbox_inches='tight')
-	print('New samples: ./output/' + str(image_num) + '.png')
+	if is_test:
+		plt.savefig('./test.png', bbox_inches='tight')
+		print("New sample: ./test.png")
+	else:
+		plt.savefig('./output/' + str(image_num) + '.png', bbox_inches='tight')
+		print('New samples: ./output/' + str(image_num) + '.png')
 	plt.close()
 
-saver = tf.train.Saver()
-def save(checkpoint_dir, curr_step, sess):
-	global saver
+def save(checkpoint_dir, curr_step, sess, saver):
 	print(" [*] Saving model at step: " + str(curr_step))
 	checkpoint_dir = os.path.join(checkpoint_dir, config.MODEL_DIR)
 
@@ -92,8 +100,7 @@ def save(checkpoint_dir, curr_step, sess):
 				global_step=curr_step)
 	print(" [*] Successfully saved model")
 
-def load(checkpoint_dir, sess):
-	global saver
+def load(checkpoint_dir, sess, saver):
 	import re
 	print(" [*] Reading checkpoints...")
 	checkpoint_dir = os.path.join(config.CHECKPOINT_DIR, config.MODEL_DIR)
