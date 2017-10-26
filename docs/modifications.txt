@@ -1,0 +1,12 @@
+* Generator loss is optimizing number of fake images classified as 1
+* Label smoothing for discriminator
+* LeakyRelu and AvgPool for discriminator to avoid sparse gradients
+* tanh for output layer of generator
+* Talk about batch norm in generator
+* Dropout in discriminator
+* Higher learning rate for generator
+* Run generator twice as often
+* Leaky Relu for generator instead of Relu
+* Feature Matching
+* Instance noise in discriminatorminibatch disc
+Compute minibatch discrim at beginning, but append to the end

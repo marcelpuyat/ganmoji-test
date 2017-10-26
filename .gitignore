@@ -1,3 +1,4 @@
 output/**
 tensorboard/**
 checkpoint/**
+emoji_images_with_word2vec.json

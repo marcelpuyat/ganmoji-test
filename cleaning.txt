@@ -1,1 +1,0 @@
-Was first seeing base64 images loaded straight into PIL as weird 72x72x1 pixel data. Turns out PIL didn't like the image format being fed into it straight from base64 decoding. So I had to first write the base64 data out into an actual .png image file, then read them in using scipy.misc.read with mode RGBA, and then PIL was able to read the pixel data in 72x72x4 format
