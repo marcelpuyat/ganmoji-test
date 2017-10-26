@@ -12,3 +12,6 @@ for pair in data:
 	fh.close()
 	pair['filename'] = filename
 	image_num += 1
+
+with open('emoji_images_high_quality.json', 'w') as fp:
+    json.dump(data, fp, indent=4)
