@@ -62,14 +62,14 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 	return D_r, D_h4, minibatch_features
 
 
-def Generator(z, name='g'):
+def Generator(z, reuse=False, name='g'):
 	# Architecture:
 	# 	Project to 1024*4*4 then reshape, then BN
 	# 	Then deconv with stride 2, 5x5 filters into 512*8*8, then BN
 	# 	Then deconv with stride 2, 5x5 filters into 256*16*16, then BN
 	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
 	#   tanh
-	with tf.variable_scope(name):
+	with tf.variable_scope(name, reuse=reuse):
 
 		G_1 = Dense(z, output_dim=1024*4*4, name='dense')
 		G_r1 = tf.reshape(G_1, [config.BATCH_SIZE, 4, 4, 1024])
@@ -102,3 +102,16 @@ def Generator(z, name='g'):
 		with tf.name_scope('tanh'):
 			variable_summaries(tanh_layer)
 		return tanh_layer
+
+def ModeEncoder(x, name='e'):
+	# Architecture:
+	#	Discriminator CNN
+	#   FC into z dim
+	#   Sigmoid
+	with tf.variable_scope(name):
+		D,_,_ = DiscriminatorBeforeFullyConnectedLayer(x, 0, False, name='Encoder')
+		D_h6 = Dense(D, output_dim=config.Z_DIM, name='dense')
+		predicted_z = tf.nn.sigmoid(D_h6, name='predictedZ')
+		with tf.name_scope('predictedZScope'):
+			variable_summaries(predicted_z)
+		return predicted_z

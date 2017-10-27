@@ -9,14 +9,20 @@ from ops import *
 from model import *
 import config
 import utils
+import time
 
 X = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.IMAGE_SIZE], name="real_images_input")
-z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, 100], name="generator_latent_space_input")
+z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.Z_DIM], name="generator_latent_space_input")
 instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_std")
 
-G = Generator(z, 'Generator')
+G = Generator(z, False, 'Generator')
 D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = Discriminator(X, instance_noise_std, False, 'Discriminator')
 D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = Discriminator(G, instance_noise_std, True, 'Discriminator')
+predicted_z = ModeEncoder(X, 'ModeEncoder')
+image_from_predicted_z = Generator(predicted_z, True, 'Generator')
+l2_distance_encoder = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z))))
+D_mode_regularizer_prob,_,_,_ = Discriminator(image_from_predicted_z, 0, True, 'Discriminator')
+mode_regularizer_loss = tf.reduce_mean(tf.log(D_mode_regularizer_prob))
 
 tf.summary.histogram("d_real_prob", D_real_prob)
 tf.summary.histogram("d_fake_prob", D_fake_prob)
@@ -49,7 +55,10 @@ D_loss += gradient_penalty
 # 0.1 was decided upon via trial/error 
 # 
 # Actually, for now, no feature matching. Was quite difficult maintaining stability when combining two things in the loss function
-G_loss = tf.identity(D_fake_wrong, "generator_loss")
+encoder_lambda = 0.2
+G_loss = tf.add(D_fake_wrong, encoder_lambda*l2_distance_encoder)
+G_loss = tf.add(G_loss, encoder_lambda*mode_regularizer_loss)
+E_loss = encoder_lambda*l2_distance_encoder + encoder_lambda*mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
 tf.summary.scalar("D_fake_loss", D_fake)
@@ -59,11 +68,15 @@ tf.summary.scalar("feature_matching_loss", feature_matching_loss)
 tf.summary.histogram("minibatch_similarity_real", minibatch_similarity_real)
 tf.summary.histogram("minibatch_similarity_fake", minibatch_similarity_fake)
 tf.summary.scalar("G_loss", G_loss)
+tf.summary.scalar("E_loss", E_loss)
+tf.summary.scalar("mode_regularizer_loss", mode_regularizer_loss)
+tf.summary.scalar("l2_distance_encoder", l2_distance_encoder)
 tf.summary.scalar("instance_noise_std", instance_noise_std)
 
 vars = tf.trainable_variables()
 d_params = [v for v in vars if v.name.startswith('Discriminator/')]
 g_params = [v for v in vars if v.name.startswith('Generator/')]
+e_params = [v for v in vars if v.name.startswith('ModeEncoder/')]
 
 def train(loss_tensor, params, learning_rate, beta1):
 	optimizer = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
@@ -74,8 +87,9 @@ def train(loss_tensor, params, learning_rate, beta1):
 	return optimizer.apply_gradients(grads)
 
 # Learning rates decided upon by trial/error
-disc_optimizer = train(D_loss, d_params, learning_rate=5e-4, beta1=0.5)
-generator_optimizer = train(G_loss, g_params, learning_rate=1e-3, beta1=0.5)
+disc_optimizer = train(D_loss, d_params, learning_rate=3e-4, beta1=0.5)
+generator_optimizer = train(G_loss, g_params, learning_rate=3e-4, beta1=0.5)
+encoder_optimizer = train(E_loss, e_params, learning_rate=3e-4, beta1=0.5)
 
 def get_perturbed_batch(minibatch):
 	return minibatch + 0.5 * minibatch.std() * np.random.random(minibatch.shape)
@@ -110,32 +124,42 @@ with tf.Session() as sess:
 	for e in range(config.EPOCHS):
 		for _ in range(config.ITERATIONS):
 
+			start = time.time()
 			instance_noise_std_value = get_instance_noise_std(curr_step)
 
 			x = utils.get_next_image_batch(config.BATCH_SIZE)
 			x = utils.normalize_image_batch(x)
 
-			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, 100]).astype(np.float32)
+			after_normalizing = time.time()
+			print("Getting inputs: " + str(after_normalizing - start))
+
+			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, config.Z_DIM]).astype(np.float32)
 			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
-			# Run generator twice
-			_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
-			summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
-
+			after_disc = time.time()
+			print("Time to run disc: " + str(after_disc - after_normalizing))
+			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
+				start = time.time()
+				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, encoder_optimizer, G_loss], feed_dict)
+				train_writer.add_summary(summary, curr_step)
+				print("Time to save summary: " + str(start - time.time()))
+			else:
+				_, _, G_loss_curr = sess.run([generator_optimizer, encoder_optimizer, G_loss], feed_dict)
+			after_gen = time.time()
+			print("Time to run G and E: " + str(after_gen - after_disc))
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
 			sys.stdout.flush()
-
 			curr_step += 1
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_IMAGE_SAMPLE == 0:
 				# Note that these samples have "pixels" in the range (-1,1)
+				start = time.time()
 				generated_samples = sess.run(G, {z: rand})
 				utils.save_samples(generated_samples, curr_step / config.STEPS_PER_IMAGE_SAMPLE)
+				print("Time to save image samples: " + str(start - time.time()))
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SAVE == 0:
+				start = time.time()
 				utils.save(config.CHECKPOINT_DIR, curr_step, sess, saver)
-
-			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
-				train_writer.add_summary(summary, curr_step)
-
+				print("Time to save checkpoint: " + str(start - time.time()))

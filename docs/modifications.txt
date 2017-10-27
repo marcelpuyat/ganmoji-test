@@ -2,11 +2,12 @@
 * Label smoothing for discriminator
 * LeakyRelu and AvgPool for discriminator to avoid sparse gradients
 * tanh for output layer of generator
-* Talk about batch norm in generator
 * Dropout in discriminator
 * Higher learning rate for generator
-* Run generator twice as often
-* Leaky Relu for generator instead of Relu
-* Feature Matching
-* Instance noise in discriminatorminibatch disc
-Compute minibatch discrim at beginning, but append to the end
+* Run generator twice as often (trying without this)
+* Leaky Relu for generator instead of Relu (did not do, no difference)
+* Feature Matching (did not do, maybe i should do this?)
+* Instance noise in discriminator
+* Compute minibatch discrim at beginning, but append to the end (tested it out, did not do, not practical for production (needs batch))
+* WGAN-GP penalties as suggested by new Goodfellow paper (Oct 2017)
+* https://openreview.net/pdf?id=HJKkY35le for mode collapse issues
