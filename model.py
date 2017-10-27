@@ -59,7 +59,7 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 	D_h4 = LeakyReLU(D_bn4)
 
 	D_r = tf.reshape(D_h4, [config.BATCH_SIZE, 4096])
-	return D_r, D_h4, minibatch_features
+	return D_r, D_conv3, minibatch_features
 
 
 def Generator(z, reuse=False, name='g'):

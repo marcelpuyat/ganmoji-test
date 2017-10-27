@@ -18,7 +18,7 @@ def normalize_image_batch(image_batch):
 
 def variable_summaries(var):
 	"""Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-	tf.summary.histogram(var.op.name, var)
+	tf.summary.tensor_summary(var.op.name, tf.reduce_mean(var))
 
 def denormalize_image(image):
 	return np.multiply(np.divide((1 + image), 2), 255)
@@ -26,7 +26,7 @@ def denormalize_image(image):
 image_metadata = []
 
 def get_image_metadata():
-	with open('emoji_images_high_quality_medium.json') as data_file:    
+	with open('emoji_images_high_quality.json') as data_file:    
 		data = json.load(data_file)
 		shuffle(data)
 		return data
