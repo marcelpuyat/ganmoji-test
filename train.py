@@ -4,6 +4,7 @@ np.set_printoptions(threshold='nan')
 import sys
 import warnings
 warnings.simplefilter('error', UserWarning)
+from scipy.stats import truncnorm
 
 from ops import *
 from model import *
@@ -88,20 +89,17 @@ def train(loss_tensor, params, learning_rate, beta1):
 	return optimizer.apply_gradients(grads)
 
 # Learning rates decided upon by trial/error
-disc_optimizer = train(D_loss, d_params, learning_rate=2e-4, beta1=0.5)
-generator_optimizer = train(G_loss, g_params, learning_rate=2e-4, beta1=0.5)
-encoder_optimizer = train(E_loss, e_params, learning_rate=2e-4, beta1=0.5)
-
-def get_perturbed_batch(minibatch):
-	return minibatch + 0.5 * minibatch.std() * np.random.random(minibatch.shape)
+disc_optimizer = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
+generator_optimizer = train(G_loss, g_params, learning_rate=1e-4, beta1=0.5)
+encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
 
 def get_instance_noise_std(iters_run):
 	# Instance noise, motivated by: http://www.inference.vc/instance-noise-a-trick-for-stabilising-gan-training/
 	# Heuristic: Values are probably best determined by seeing how identifiable
 	# your images are with certain levels of noise. Here, I am starting off
 	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
-	INITIAL_NOISE_STD = 0.45
-	LAST_ITER_WITH_NOISE = 12000
+	INITIAL_NOISE_STD = 0.3
+	LAST_ITER_WITH_NOISE = 2000
 	if iters_run >= LAST_ITER_WITH_NOISE:
 		return 0.0
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)

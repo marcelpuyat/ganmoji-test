@@ -115,3 +115,37 @@ def ModeEncoder(x, name='e'):
 		with tf.name_scope('predictedZScope'):
 			variable_summaries(predicted_z)
 		return predicted_z
+
+def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
+	# Architecture:
+	# 	Project to 1024*4*4 then reshape, then BN
+	# 	Then deconv with stride 2, 5x5 filters into 512*8*8, then BN
+	# 	Then deconv with stride 2, 5x5 filters into 256*16*16, then BN
+	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
+	#   tanh
+	with tf.variable_scope(name):
+		z_with_embeddings = tf.concat([z, embeddings], 1)
+		return Generator(z_with_embeddings, reuse, name)
+
+def DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, reuse=False, name='d'):
+	with tf.variable_scope(name, reuse=reuse):
+		D_r, D_h3_conv, minibatch_features = DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse, name)
+		D_h6_with_embeddings = tf.concat([D_r, embeddings], 1)
+		D_h6 = Dense(D_h6_with_embeddings, output_dim=1, name='dense')
+		preds = tf.nn.sigmoid(D_h6, name='predictions')
+		with tf.name_scope('discrim_preds'):
+			variable_summaries(preds)
+		return preds, D_h6, D_h3_conv, minibatch_features
+
+def ModeEncoderWithEmbeddings(x, embeddings, name='e'):
+	# Architecture:
+	#	Discriminator CNN
+	#   FC into z dim + embeddings dim
+	#   Sigmoid
+	with tf.variable_scope(name):
+		D,_,_ = DiscriminatorBeforeFullyConnectedLayer(x, 0, False, name='Encoder')
+		D_h6 = Dense(D, output_dim=config.Z_DIM, name='dense')
+		predicted_z = tf.nn.sigmoid(D_h6, name='predictedZ')
+		with tf.name_scope('predictedZScope'):
+			variable_summaries(predicted_z)
+		return predicted_z
