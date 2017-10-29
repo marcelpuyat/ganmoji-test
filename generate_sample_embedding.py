@@ -144,6 +144,6 @@ with tf.Session() as sess:
 		for i,_ in enumerate(embeddings_batch):
 			embeddings_batch[i] = np.array(vector)
 		generated_samples = sess.run(G, {z: rand, embeddings: embeddings_batch})
-		save_samples(generated_samples, 0, True)
+		save_samples(generated_samples, 0, True, label)
 
 

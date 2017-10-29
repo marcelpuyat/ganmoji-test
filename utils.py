@@ -73,7 +73,7 @@ def get_next_image_batch(batch_size):
 			break
 	return pixels_batch
 
-def save_samples(samples, image_num, is_test=False):
+def save_samples(samples, image_num, is_test=False, label='test'):
 	fig = plt.figure(figsize=(18, 18))
 	gs = gridspec.GridSpec(8, 8)
 	gs.update(wspace=0.06, hspace=0.06)
@@ -84,6 +84,31 @@ def save_samples(samples, image_num, is_test=False):
 		sample = denormalize_image(sample)
 		ax = plt.subplot(gs[i % 8, int(i / 8)])
 		plt.axis('off')
+		ax.set_xticklabels([])
+		ax.set_yticklabels([])
+		ax.set_aspect('equal')
+		plt.imshow(sample.reshape(64, 64, 4).astype(np.uint8))
+
+	if is_test:
+		plt.savefig('./'+label+'.png', bbox_inches='tight')
+		print("New sample: ./'+label+'.png")
+	else:
+		plt.savefig('./output/' + str(image_num) + '.png', bbox_inches='tight')
+		print('New samples: ./output/' + str(image_num) + '.png')
+	plt.close()
+
+def save_samples_labeled(samples, labels, image_num, is_test=False):
+	fig = plt.figure(figsize=(45, 30))
+	gs = gridspec.GridSpec(8, 8)
+	gs.update(wspace=0.8, hspace=0.4)
+
+	# Generate images
+	for i, sample in enumerate(samples[:32]):
+		# need to convert sample from range -1,1 to 0 255
+		sample = denormalize_image(sample)
+		ax = plt.subplot(gs[i % 8, int(i / 8)])
+		plt.axis('off')
+		ax.set_title(labels[i], fontsize=18)
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		ax.set_aspect('equal')

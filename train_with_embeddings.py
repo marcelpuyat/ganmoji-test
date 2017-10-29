@@ -87,11 +87,12 @@ def get_next_image_batch(batch_size):
 X = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.IMAGE_SIZE], name="real_images_input")
 z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, 100], name="generator_latent_space_input")
 embeddings = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.WORD_EMBEDDING_DIM], name="embeddings_input")
+noisy_embeddings = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.WORD_EMBEDDING_DIM], name="noisy_embeddings_input")
 instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_std")
 
 G = GeneratorWithEmbeddings(z, embeddings, False, 'Generator')
-D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = DiscriminatorWithEmbeddings(G, embeddings, instance_noise_std, True, 'Discriminator')
+D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = DiscriminatorWithEmbeddings(X, noisy_embeddings, instance_noise_std, False, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = DiscriminatorWithEmbeddings(G, noisy_embeddings, instance_noise_std, True, 'Discriminator')
 predicted_z = ModeEncoderWithEmbeddings(X, embeddings, 'ModeEncoder')
 image_from_predicted_z = GeneratorWithEmbeddings(predicted_z, embeddings, True, 'Generator')
 l2_distance_encoder = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z))))
@@ -134,7 +135,7 @@ D_loss += gradient_penalty
 # Also mode regularizer and l2_distance_encoder from MRGAN
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
 encoder_lambda_1 = 0.01
-encoder_lambda_2 = 0.001
+encoder_lambda_2 = 0.02
 feature_matching_lambda = 0.01
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
@@ -181,7 +182,7 @@ def get_instance_noise_std(iters_run):
 	# your images are with certain levels of noise. Here, I am starting off
 	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
 	INITIAL_NOISE_STD = 0.4
-	LAST_ITER_WITH_NOISE = 4000
+	LAST_ITER_WITH_NOISE = 15000
 	if iters_run >= LAST_ITER_WITH_NOISE:
 		return 0.0
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
@@ -208,10 +209,17 @@ with tf.Session() as sess:
 			instance_noise_std_value = get_instance_noise_std(curr_step)
 
 			x, label_embeddings, labels = get_next_image_batch(config.BATCH_SIZE)
+			noisy_label_embeddings = np.zeros((config.BATCH_SIZE, config.WORD_EMBEDDING_DIM))
+			# Give non-sensical label to some objects in batch
+			for i in range(len(labels)):
+				if np.random.rand() < 0.1:
+					noisy_label_embeddings[i] = np.random.normal(0, 0.16, 300)
+				else:
+					noisy_label_embeddings[i] = label_embeddings[i]
 			x = utils.normalize_image_batch(x)
 
 			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, 100]).astype(np.float32)
-			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings}
+			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings, noisy_embeddings: noisy_label_embeddings}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
@@ -226,13 +234,8 @@ with tf.Session() as sess:
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_IMAGE_SAMPLE == 0:
 				# Note that these samples have "pixels" in the range (-1,1)
-				print("Generating images for labels:")
-				for i, label in enumerate(labels):
-					if i > 0 and i % 8 == 0:
-						print("--------------")
-					print(str(i) + ": " + label)
 				generated_samples = sess.run(G, {z: rand, embeddings: label_embeddings})
-				utils.save_samples(generated_samples, curr_step / config.STEPS_PER_IMAGE_SAMPLE)
+				utils.save_samples_labeled(generated_samples, labels, curr_step / config.STEPS_PER_IMAGE_SAMPLE)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SAVE == 0:
 				utils.save(config.CHECKPOINT_DIR, curr_step, sess, saver)
