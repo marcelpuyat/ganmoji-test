@@ -24,7 +24,7 @@ import utils
 image_metadata = []
 
 def get_image_metadata():
-	with open('sanitized_emoji_images_high_quality_medium.json') as data_file:    
+	with open('sanitized_emoji_images_high_quality_medium_large.json') as data_file:    
 		data = json.load(data_file)
 		shuffle(data)
 		return data
@@ -76,6 +76,7 @@ def get_next_image_batch(batch_size):
 			label = image_metadata[curr_image_idx]['title']
 			if label not in word_vectors:
 				print("Didn't find " + label + " in word vectors. Skipping.")
+				curr_image_idx += 1
 				continue
 			pixels_batch[i] = pix.reshape([config.IMAGE_SIZE])
 			embeddings_batch[i] = np.array(word_vectors[label])
