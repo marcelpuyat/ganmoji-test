@@ -135,7 +135,7 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
 	#   tanh
 	with tf.variable_scope(name):
-		embeddings = tf.nn.dropout(embeddings, 0.4)
+		embeddings = tf.nn.dropout(embeddings, 0.3)
 		z_with_embeddings = tf.concat([z, embeddings], 1)
 		return Generator(z_with_embeddings, reuse, name)
 
@@ -154,11 +154,11 @@ def ModeEncoderWithEmbeddings(x, embeddings, name='e'):
 	# Architecture:
 	#	Discriminator CNN
 	#   FC into z dim + embeddings dim
-	#   Sigmoid
+	#   tanh
 	with tf.variable_scope(name):
 		D,_,_ = DiscriminatorBeforeFullyConnectedLayer(x, 0, False, name='Encoder')
 		D_h6 = Dense(D, output_dim=config.Z_DIM, name='dense')
-		predicted_z = tf.nn.sigmoid(D_h6, name='predictedZ')
+		predicted_z = tf.nn.tanh(D_h6, name='predictedZ')
 		with tf.name_scope('predictedZScope'):
 			variable_summaries(predicted_z)
 		return predicted_z
