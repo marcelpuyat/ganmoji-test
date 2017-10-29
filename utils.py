@@ -87,7 +87,7 @@ def save_samples(samples, image_num, is_test=False, label='test'):
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		ax.set_aspect('equal')
-		plt.imshow(sample.reshape(64, 64, 4).astype(np.uint8))
+		plt.imshow(sample.reshape(128, 128, 4).astype(np.uint8))
 
 	if is_test:
 		plt.savefig('./'+label+'.png', bbox_inches='tight')
@@ -112,7 +112,7 @@ def save_samples_labeled(samples, labels, image_num, is_test=False):
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		ax.set_aspect('equal')
-		plt.imshow(sample.reshape(64, 64, 4).astype(np.uint8))
+		plt.imshow(sample.reshape(128, 128, 4).astype(np.uint8))
 
 	if is_test:
 		plt.savefig('./test.png', bbox_inches='tight')

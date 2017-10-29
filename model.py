@@ -135,7 +135,7 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
 	#   tanh
 	with tf.variable_scope(name):
-		embeddings = tf.nn.dropout(embeddings, 0.2)
+		embeddings = tf.nn.dropout(embeddings, 0.4)
 		z_with_embeddings = tf.concat([z, embeddings], 1)
 		return Generator(z_with_embeddings, reuse, name)
 
