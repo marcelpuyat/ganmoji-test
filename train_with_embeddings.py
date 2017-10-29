@@ -24,7 +24,7 @@ import utils
 image_metadata = []
 
 def get_image_metadata():
-	with open('sanitized_emoji_images_high_quality_medium_large.json') as data_file:    
+	with open('sanitized_emoji_images_high_quality_medium.json') as data_file:    
 		data = json.load(data_file)
 		shuffle(data)
 		return data
@@ -38,7 +38,7 @@ word_vectors = get_word_vectors() # Load all word vectors into memory
 
 def get_pixels_for_filename(filename):
     img = scipy.misc.imread(filename, mode='RGBA')
-    img = scipy.misc.imresize(img, [64, 64])
+    img = scipy.misc.imresize(img, [128, 128])
     return np.array(img)
 
 curr_image_idx = 0
@@ -67,7 +67,7 @@ def get_next_image_batch(batch_size):
 			except:
 				curr_image_idx += 1
 				continue
-			if pix.shape != (64, 64, 4):
+			if pix.shape != (128, 128, 4):
 				print('Invalid pixels shape for file ' + image_metadata[curr_image_idx]['filename'] + ': ' + str(pix.shape) + ". Skipping.")
 				# Skip this image
 				curr_image_idx += 1
