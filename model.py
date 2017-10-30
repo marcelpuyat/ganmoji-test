@@ -135,8 +135,8 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
 	#   tanh
 	with tf.variable_scope(name):
-		embeddings_with_noise = embeddings + tf.random_normal(shape=tf.shape(embeddings), mean=0, stddev=0.002, dtype=tf.float32)
-		embeddings = tf.nn.dropout(embeddings_with_noise, 0.2)
+		embeddings_with_noise = embeddings + tf.random_normal(shape=tf.shape(embeddings), mean=0, stddev=0.004, dtype=tf.float32)
+		embeddings = tf.nn.dropout(embeddings_with_noise, 0.35)
 		z_with_embeddings = tf.concat([z, embeddings], 1)
 		return Generator(z_with_embeddings, reuse, name)
 

@@ -22,7 +22,7 @@ import utils
 image_metadata = []
 
 def get_image_metadata():
-	with open('sanitized_emoji_images_high_quality_medium_large.json') as data_file:    
+	with open('sanitized_emoji_images_high_quality_medium.json') as data_file:    
 		data = json.load(data_file)
 		shuffle(data)
 		return data
@@ -136,11 +136,11 @@ D_loss += gradient_penalty
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
 encoder_lambda_1 = 0.01
 encoder_lambda_2 = 0.02
-feature_matching_lambda = 0.0001
+feature_matching_lambda = 0.0003
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
-G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss
+G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss
 E_loss = l2_distance_encoder + mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
