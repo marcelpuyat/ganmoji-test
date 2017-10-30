@@ -35,7 +35,7 @@ image_metadata = get_image_metadata() # Load all image filenames into memory
 
 def get_pixels_for_filename(filename):
     img = scipy.misc.imread(filename, mode='RGBA')
-    img = scipy.misc.imresize(img, [128, 128])
+    img = scipy.misc.imresize(img, [64, 64])
     return np.array(img)
 
 curr_image_idx = 0
@@ -62,7 +62,7 @@ def get_next_image_batch(batch_size):
 				print(str(e))
 				curr_image_idx += 1
 				continue
-			if pix.shape != (128, 128, 4):
+			if pix.shape != (64, 64, 4):
 				print('Invalid pixels shape for file ' + image_metadata[curr_image_idx]['filename'] + ': ' + str(pix.shape))
 				# Skip this image
 				curr_image_idx += 1
@@ -87,7 +87,7 @@ def save_samples(samples, image_num, is_test=False, label='test'):
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		ax.set_aspect('equal')
-		plt.imshow(sample.reshape(128, 128, 4).astype(np.uint8))
+		plt.imshow(sample.reshape(64, 64, 4).astype(np.uint8))
 
 	if is_test:
 		plt.savefig('./'+label+'.png', bbox_inches='tight')
@@ -112,7 +112,7 @@ def save_samples_labeled(samples, labels, image_num, is_test=False):
 		ax.set_xticklabels([])
 		ax.set_yticklabels([])
 		ax.set_aspect('equal')
-		plt.imshow(sample.reshape(128, 128, 4).astype(np.uint8))
+		plt.imshow(sample.reshape(64, 64, 4).astype(np.uint8))
 
 	if is_test:
 		plt.savefig('./test.png', bbox_inches='tight')

@@ -36,7 +36,7 @@ word_vectors = get_word_vectors() # Load all word vectors into memory
 
 def get_pixels_for_filename(filename):
     img = imread(filename, mode='RGBA')
-    img = imresize(img, [128, 128])
+    img = imresize(img, [64, 64])
     return np.array(img)
 
 curr_image_idx = 0
@@ -65,7 +65,7 @@ def get_next_image_batch(batch_size):
 			except:
 				curr_image_idx += 1
 				continue
-			if pix.shape != (128, 128, 4):
+			if pix.shape != (64, 64, 4):
 				print('Invalid pixels shape for file ' + image_metadata[curr_image_idx]['filename'] + ': ' + str(pix.shape) + ". Skipping.")
 				# Skip this image
 				curr_image_idx += 1
@@ -135,7 +135,7 @@ D_loss += gradient_penalty
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
 encoder_lambda_1 = 0.01
 encoder_lambda_2 = 0.02
-feature_matching_lambda = 0.01
+feature_matching_lambda = 0.003
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
