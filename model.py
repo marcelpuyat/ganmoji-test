@@ -122,7 +122,7 @@ def ModeEncoder(x, name='e'):
 	with tf.variable_scope(name):
 		D,_,_ = DiscriminatorBeforeFullyConnectedLayer(x, 0, False, name='Encoder')
 		D_h6 = Dense(D, output_dim=config.Z_DIM, name='dense')
-		predicted_z = tf.nn.sigmoid(D_h6, name='predictedZ')
+		predicted_z = tf.nn.tanh(D_h6, name='predictedZ')
 		with tf.name_scope('predictedZScope'):
 			variable_summaries(predicted_z)
 		return predicted_z
