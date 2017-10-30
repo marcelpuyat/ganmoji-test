@@ -12,7 +12,6 @@ import commands
 import time
 import os
 import json
-from math import isnan
 
 from ops import *
 from model import *
@@ -96,8 +95,7 @@ D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = D
 predicted_z = ModeEncoderWithEmbeddings(X, embeddings, 'ModeEncoder')
 image_from_predicted_z = GeneratorWithEmbeddings(predicted_z, embeddings, True, 'Generator')
 l2_distance_encoder = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z))))
-if math.isnan(l2_distance_encoder):
-	l2_distance_encoder = 1
+l2_distance_encoder = tf.cond(tf.is_nan(l2_distance_encoder), lambda: 1, lambda: l2_distance_encoder)
 D_mode_regularizer_prob,_,_,_ = DiscriminatorWithEmbeddings(image_from_predicted_z, embeddings, instance_noise_std, True, 'Discriminator')
 mode_regularizer_loss = tf.reduce_mean(tf.log(D_mode_regularizer_prob))
 
