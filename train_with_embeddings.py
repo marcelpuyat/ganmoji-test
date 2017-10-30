@@ -216,7 +216,7 @@ with tf.Session() as sess:
 			x, label_embeddings, labels = get_next_image_batch(config.BATCH_SIZE)
 			x = utils.normalize_image_batch(x)
 
-			rand = latent_space_sampler.rvs((config.BATCH_SIZE, config.Z_DIM))
+			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, config.Z_DIM]).astype(np.float32)
 			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
