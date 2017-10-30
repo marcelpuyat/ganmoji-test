@@ -86,12 +86,11 @@ def get_next_image_batch(batch_size):
 X = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.IMAGE_SIZE], name="real_images_input")
 z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, 100], name="generator_latent_space_input")
 embeddings = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.WORD_EMBEDDING_DIM], name="embeddings_input")
-noisy_embeddings = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.WORD_EMBEDDING_DIM], name="noisy_embeddings_input")
 instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_std")
 
 G = GeneratorWithEmbeddings(z, embeddings, False, 'Generator')
-D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = DiscriminatorWithEmbeddings(X, noisy_embeddings, instance_noise_std, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = DiscriminatorWithEmbeddings(G, noisy_embeddings, instance_noise_std, True, 'Discriminator')
+D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, False, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = DiscriminatorWithEmbeddings(G, embeddings, instance_noise_std, True, 'Discriminator')
 predicted_z = ModeEncoderWithEmbeddings(X, embeddings, 'ModeEncoder')
 image_from_predicted_z = GeneratorWithEmbeddings(predicted_z, embeddings, True, 'Generator')
 l2_distance_encoder = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z))))
@@ -215,17 +214,10 @@ with tf.Session() as sess:
 			instance_noise_std_value = get_instance_noise_std(curr_step)
 
 			x, label_embeddings, labels = get_next_image_batch(config.BATCH_SIZE)
-			noisy_label_embeddings = np.zeros((config.BATCH_SIZE, config.WORD_EMBEDDING_DIM))
-			# Give non-sensical label to some objects in batch
-			for i in range(len(labels)):
-				if np.random.rand() < 0.15:
-					noisy_label_embeddings[i] = np.random.normal(0, 0.16, 300)
-				else:
-					noisy_label_embeddings[i] = label_embeddings[i]
 			x = utils.normalize_image_batch(x)
 
 			rand = latent_space_sampler.rvs((config.BATCH_SIZE, config.Z_DIM))
-			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings, noisy_embeddings: noisy_label_embeddings}
+			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
