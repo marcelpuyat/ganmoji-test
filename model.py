@@ -134,16 +134,21 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 	# 	Then deconv with stride 2, 5x5 filters into 256*16*16, then BN
 	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
 	#   tanh
-	with tf.variable_scope(name):
-		embeddings = tf.nn.dropout(embeddings, 0.4)
-		z_with_embeddings = tf.concat([z, embeddings], 1)
+	with tf.variable_scope(name, reuse=reuse):
+		fc_embeddings = Dense(embeddings, output_dim=128, name='embeddings_dense')
+		fc_embeddings = tf.nn.dropout(fc_embeddings, 0.4)
+		z_with_embeddings = tf.concat([z, fc_embeddings], 1)
 		return Generator(z_with_embeddings, reuse, name)
 
 def DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, reuse=False, name='d'):
 	with tf.variable_scope(name, reuse=reuse):
 		embeddings_with_noise = embeddings + tf.random_normal(shape=tf.shape(embeddings), mean=0, stddev=0.002, dtype=tf.float32)
 		D_r, D_h3_conv, minibatch_features = DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse, name)
-		D_h6_with_embeddings = tf.concat([D_r, embeddings_with_noise], 1)
+
+		# Throw embeddings into a fully connected layer first
+		fc_embeddings = Dense(embeddings_with_noise, output_dim=128, name='embeddings_dense')
+
+		D_h6_with_embeddings = tf.concat([D_r, fc_embeddings], 1)
 		D_h6 = Dense(D_h6_with_embeddings, output_dim=1, name='dense')
 		preds = tf.nn.sigmoid(D_h6, name='predictions')
 		with tf.name_scope('discrim_preds'):
