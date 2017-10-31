@@ -86,11 +86,12 @@ def get_next_image_batch(batch_size):
 X = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.IMAGE_SIZE], name="real_images_input")
 z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, 100], name="generator_latent_space_input")
 embeddings = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.WORD_EMBEDDING_DIM], name="embeddings_input")
+noisy_embeddings = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.WORD_EMBEDDING_DIM], name="noisy_embeddings_input")
 instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_std")
 
 G = GeneratorWithEmbeddings(z, embeddings, False, 'Generator')
-D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = DiscriminatorWithEmbeddings(G, embeddings, instance_noise_std, True, 'Discriminator')
+D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = DiscriminatorWithEmbeddings(X, noisy_embeddings, instance_noise_std, False, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = DiscriminatorWithEmbeddings(G, noisy_embeddings, instance_noise_std, True, 'Discriminator')
 predicted_z = ModeEncoderWithEmbeddings(X, embeddings, 'ModeEncoder')
 image_from_predicted_z = GeneratorWithEmbeddings(predicted_z, embeddings, True, 'Generator')
 l2_distance_encoder = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z))))
@@ -134,11 +135,11 @@ D_loss += gradient_penalty
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
 encoder_lambda_1 = 0.01
 encoder_lambda_2 = 0.02
-feature_matching_lambda = 0.0005
+feature_matching_lambda = 0.01
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
-G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss
+G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss
 E_loss = l2_distance_encoder + mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
@@ -172,7 +173,7 @@ def train(loss_tensor, params, learning_rate, beta1):
 # Learning rates decided upon by trial/error. Using 1e-4 eventually resulted in oscillating gradients for G at 15k+ steps.
 global_step = tf.Variable(0, trainable=False)
 boundaries = [5000, 10000, 15000, 20000, 30000, 40000, 50000]
-values = [3e-4, 1e-4, 8e-5, 5e-5, 3e-5, 2e-5, 1e-5, 8e-6]
+values = [1e-4, 1e-4, 8e-5, 5e-5, 3e-5, 2e-5, 1e-5, 8e-6]
 decaying_learning_rate = tf.train.piecewise_constant(global_step, boundaries, values)
 disc_optimizer = train(D_loss, d_params, learning_rate=decaying_learning_rate, beta1=0.5)
 generator_optimizer = train(G_loss, g_params, learning_rate=decaying_learning_rate, beta1=0.5)
@@ -214,10 +215,17 @@ with tf.Session() as sess:
 			instance_noise_std_value = get_instance_noise_std(curr_step)
 
 			x, label_embeddings, labels = get_next_image_batch(config.BATCH_SIZE)
+			noisy_label_embeddings = np.zeros((config.BATCH_SIZE, config.WORD_EMBEDDING_DIM))
+			# Give non-sensical label to some objects in batch
+			for i in range(len(labels)):
+				if np.random.rand() < 0.1:
+					noisy_label_embeddings[i] = np.random.normal(0, 0.16, 300)
+				else:
+ 					noisy_label_embeddings[i] = label_embeddings[i]
 			x = utils.normalize_image_batch(x)
 
 			rand = latent_space_sampler.rvs((config.BATCH_SIZE, config.Z_DIM))
-			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings}
+			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings, noisy_embeddings: noisy_label_embeddings}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
