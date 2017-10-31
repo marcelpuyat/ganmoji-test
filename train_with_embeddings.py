@@ -218,7 +218,7 @@ with tf.Session() as sess:
 			noisy_label_embeddings = np.zeros((config.BATCH_SIZE, config.WORD_EMBEDDING_DIM))
 			# Give non-sensical label to some objects in batch
 			for i in range(len(labels)):
-				if np.random.rand() < 0.1:
+				if np.random.rand() < 0.33:
 					noisy_label_embeddings[i] = np.random.normal(0, 0.16, 300)
 				else:
  					noisy_label_embeddings[i] = label_embeddings[i]
