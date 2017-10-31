@@ -224,7 +224,6 @@ with tf.Session() as sess:
 				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, encoder_optimizer, G_loss], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
-				sess.run([generator_optimizer, encoder_optimizer, G_loss], feed_dict)
 				_, _, G_loss_curr = sess.run([generator_optimizer, encoder_optimizer, G_loss], feed_dict)
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
