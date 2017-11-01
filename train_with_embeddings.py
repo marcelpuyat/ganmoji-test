@@ -216,10 +216,10 @@ with tf.Session() as sess:
 			noisy_label_embeddings = np.zeros((config.BATCH_SIZE, config.WORD_EMBEDDING_DIM))
 			# Give non-sensical label to some objects in batch
 			for i in range(len(labels)):
-				if np.random.rand() < 0.1:
-					noisy_label_embeddings[i] = np.random.normal(0, 0.16, 300)
-				else:
-					noisy_label_embeddings[i] = label_embeddings[i]
+				# if np.random.rand() < 0.1:
+				# 	noisy_label_embeddings[i] = np.random.normal(0, 0.16, 300)
+				# else:
+				noisy_label_embeddings[i] = label_embeddings[i]
 			x = utils.normalize_image_batch(x)
 
 			rand = latent_space_sampler.rvs((config.BATCH_SIZE, config.Z_DIM))
