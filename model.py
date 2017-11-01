@@ -138,7 +138,8 @@ def DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, reuse=False, 
 	with tf.variable_scope(name, reuse=reuse):
 		D_r, D_h3_conv, minibatch_features = DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse, name)
 		D_h6_with_embeddings = tf.concat([D_r, embeddings], 1)
-		D_h6 = Dense(D_h6_with_embeddings, output_dim=1, name='dense')
+		D_h6_with_minibatch = tf.concat([D_h6_with_embeddings, minibatch_features], 1)
+		D_h6 = Dense(D_h6_with_minibatch, output_dim=1, name='dense')
 		preds = tf.nn.sigmoid(D_h6, name='predictions')
 		with tf.name_scope('discrim_preds'):
 			variable_summaries(preds)
