@@ -135,13 +135,12 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
 	#   tanh
 	with tf.variable_scope(name):
-		embeddings = tf.nn.dropout(embeddings, 0.4)
 		z_with_embeddings = tf.concat([z, embeddings], 1)
 		return Generator(z_with_embeddings, reuse, name)
 
 def DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, reuse=False, name='d'):
 	with tf.variable_scope(name, reuse=reuse):
-		embeddings_with_noise = embeddings + tf.random_normal(shape=tf.shape(embeddings), mean=0, stddev=0.002, dtype=tf.float32)
+		embeddings_with_noise = embeddings + tf.random_normal(shape=tf.shape(embeddings), mean=0, stddev=0.015, dtype=tf.float32)
 		D_r, D_h3_conv, minibatch_features = DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse, name)
 		D_h6_with_embeddings = tf.concat([D_r, embeddings_with_noise], 1)
 		D_h6 = Dense(D_h6_with_embeddings, output_dim=1, name='dense')
