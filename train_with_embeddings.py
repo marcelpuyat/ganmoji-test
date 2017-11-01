@@ -155,7 +155,7 @@ D_loss += gradient_penalty
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
 encoder_lambda_1 = 0.01
 encoder_lambda_2 = 0.02
-feature_matching_lambda = 0.07
+feature_matching_lambda = 0.1
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
@@ -239,11 +239,14 @@ with tf.Session() as sess:
 			feed_dict_g = {X: x_g, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings_g}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
+			# Train on same label batch
+			sess.run([generator_optimizer, encoder_optimizer], feed_dict_g)
+			sess.run([disc_optimizer], feed_dict_g)
+
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
 				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, encoder_optimizer, G_loss], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
-				sess.run([generator_optimizer, encoder_optimizer], feed_dict_g)
 				_, _, G_loss_curr = sess.run([generator_optimizer, encoder_optimizer, G_loss], feed_dict)
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
