@@ -257,7 +257,7 @@ with tf.Session() as sess:
 
 				# This is for same labels
 				generated_samples = sess.run(G, {z: rand, embeddings: label_embeddings_g})
-				utils.save_samples_labeled(generated_samples, labels, curr_step / config.STEPS_PER_IMAGE_SAMPLE + 1000)
+				utils.save_samples_labeled(generated_samples, labels_g, curr_step / config.STEPS_PER_IMAGE_SAMPLE + 1000)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SAVE == 0:
 				utils.save(config.CHECKPOINT_DIR, curr_step, sess, saver)
