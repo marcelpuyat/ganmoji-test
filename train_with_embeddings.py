@@ -40,7 +40,7 @@ word_vectors = get_word_vectors() # Load all word vectors into memory
 def get_pixels_for_filename(filename):
 	img = imread(filename, mode='RGBA')
 	img = imresize(img, [128, 128])
-    return np.array(img)
+	return np.array(img)
 
 curr_image_idx = 0
 def get_next_image_batch(batch_size):
