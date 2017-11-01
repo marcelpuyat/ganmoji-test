@@ -159,8 +159,7 @@ feature_matching_lambda = 0.07
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
-minibatch_discrim_loss = tf.nn.l2_loss(minibatch_similarity_real - minibatch_similarity_fake)
-G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss + minibatch_discrim_loss
+G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss
 E_loss = l2_distance_encoder + mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
@@ -175,7 +174,6 @@ tf.summary.scalar("l2_distance_encoder", l2_distance_encoder)
 tf.summary.scalar("instance_noise_std", instance_noise_std)
 tf.summary.scalar("minibatch_similarity_real", tf.reduce_mean(minibatch_similarity_real))
 tf.summary.scalar("minibatch_similarity_fake", tf.reduce_mean(minibatch_similarity_fake))
-tf.summary.scalar("minibatch_similarity_loss", minibatch_discrim_loss)
 tf.summary.scalar("d_real_prob", tf.reduce_mean(D_real_prob))
 tf.summary.scalar("d_fake_prob", tf.reduce_mean(D_fake_prob))
 
