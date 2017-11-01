@@ -9,7 +9,8 @@ warnings.simplefilter('error', UserWarning)
 from random import shuffle
 import json
 from PIL import Image
-import scipy.misc
+from scipy.misc import imread, imresize
+from scipy.stats import truncnorm
 import commands
 import time
 import os
@@ -37,8 +38,8 @@ image_metadata = get_image_metadata() # Load all image filenames into memory
 word_vectors = get_word_vectors() # Load all word vectors into memory
 
 def get_pixels_for_filename(filename):
-    img = scipy.misc.imread(filename, mode='RGBA')
-    img = scipy.misc.imresize(img, [128, 128])
+	img = imread(filename, mode='RGBA')
+	img = imresize(img, [128, 128])
     return np.array(img)
 
 curr_image_idx = 0
@@ -177,6 +178,8 @@ disc_optimizer = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
 generator_optimizer = train(G_loss, g_params, learning_rate=1e-4, beta1=0.5)
 encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
 
+# Normal distribution centered around 0.0 with stddev 0.33, clipped at -1 and 1
+latent_space_sampler = truncnorm(a=-1/0.33, b=1/0.33, scale=0.33)
 def get_instance_noise_std(iters_run):
 	# Instance noise, motivated by: http://www.inference.vc/instance-noise-a-trick-for-stabilising-gan-training/
 	# Heuristic: Values are probably best determined by seeing how identifiable
@@ -219,7 +222,7 @@ with tf.Session() as sess:
 					noisy_label_embeddings[i] = label_embeddings[i]
 			x = utils.normalize_image_batch(x)
 
-			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, 100]).astype(np.float32)
+			rand = latent_space_sampler.rvs((config.BATCH_SIZE, config.Z_DIM))
 			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings, noisy_embeddings: noisy_label_embeddings}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 

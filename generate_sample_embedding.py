@@ -19,6 +19,7 @@ from model import *
 import re
 import utils
 import config
+from scipy.stats import truncnorm
 
 z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, 100], name="generator_latent_space_input")
 embeddings = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.WORD_EMBEDDING_DIM], name="embeddings_input")
@@ -136,7 +137,8 @@ with tf.Session() as sess:
 
 	while True:
 		print("CTRL+C to quit")
-		rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, 100]).astype(np.float32)
+		latent_space_sampler = truncnorm(a=-1/0.33, b=1/0.33, scale=0.33)
+		rand = latent_space_sampler.rvs((config.BATCH_SIZE, config.Z_DIM))
 		# label, vector = generate_random_label()
 		label, vector = generate_with_query()
 
