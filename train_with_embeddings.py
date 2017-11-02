@@ -118,7 +118,7 @@ l2_distance_encoder = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(X, image_from_
 D_mode_regularizer_prob,_,_,_ = DiscriminatorWithEmbeddings(image_from_predicted_z, embeddings, instance_noise_std, True, 'Discriminator')
 mode_regularizer_loss = tf.reduce_mean(tf.log(D_mode_regularizer_prob))
 
-D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones_like(D_real_logits)), name="disc_real_cross_entropy")
+D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones_like(D_real_logits) * 0.8), name="disc_real_cross_entropy")
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)), name="disc_fake_cross_entropy")
 D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
 
@@ -155,7 +155,7 @@ D_loss += gradient_penalty
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
 encoder_lambda_1 = 0.01
 encoder_lambda_2 = 0.02
-feature_matching_lambda = 0.1
+feature_matching_lambda = 0.075
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
@@ -202,8 +202,8 @@ def get_instance_noise_std(iters_run):
 	# Heuristic: Values are probably best determined by seeing how identifiable
 	# your images are with certain levels of noise. Here, I am starting off
 	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
-	INITIAL_NOISE_STD = 0.4
-	LAST_ITER_WITH_NOISE = 15000
+	INITIAL_NOISE_STD = 1.1
+	LAST_ITER_WITH_NOISE = 20000
 	if iters_run >= LAST_ITER_WITH_NOISE:
 		return 0.0
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
