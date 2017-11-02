@@ -45,11 +45,7 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 	D_bn1 = BatchNormalization(D_conv1, name='conv_bn1')
 	D_h1 = LeakyReLU(D_bn1)
 
-	extra_layer_conv = Conv2d(D_h1, output_dim=32, kernel=(3,3), strides=(1,1), name='conv_extra')
-	extra_layer_bn = BatchNormalization(extra_layer_conv, name="conv_extra_bn")
-	extra_layer_relu = LeakyReLU(extra_layer_bn)
-
-	D_conv2 = Conv2d(extra_layer_relu, output_dim=64, kernel=(3,3), name='conv2')
+	D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='conv2')
 	D_bn2 = BatchNormalization(D_conv2, name='conv_bn2')
 	D_h2 = LeakyReLU(D_bn2)
 	D_conv3 = Conv2d(D_h2, output_dim=128, kernel=(3,3), name='conv3')
@@ -60,7 +56,7 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 	D_h4 = LeakyReLU(D_bn4)
 
 	D_r = tf.reshape(D_h4, [config.BATCH_SIZE, 16384])
-	return D_r, D_conv3, minibatch_features
+	return D_r, D_conv4, minibatch_features
 
 
 def Generator(z, reuse=False, name='g'):
@@ -137,7 +133,7 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 def DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, reuse=False, name='d'):
 	with tf.variable_scope(name, reuse=reuse):
 		D_r, D_h3_conv, minibatch_features = DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse, name)
-		D_r_dropped_out = tf.nn.dropout(D_r, 0.4)
+		D_r_dropped_out = tf.nn.dropout(D_r, 0.3)
 		D_h6_with_embeddings = tf.concat([D_r, embeddings], 1)
 		D_h6_with_minibatch = tf.concat([D_h6_with_embeddings, minibatch_features], 1)
 		D_h6 = Dense(D_h6_with_minibatch, output_dim=1, name='dense')

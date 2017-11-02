@@ -155,7 +155,7 @@ D_loss += gradient_penalty
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
 encoder_lambda_1 = 0.01
 encoder_lambda_2 = 0.02
-feature_matching_lambda = 0.075
+feature_matching_lambda = 0.025
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
@@ -202,8 +202,8 @@ def get_instance_noise_std(iters_run):
 	# Heuristic: Values are probably best determined by seeing how identifiable
 	# your images are with certain levels of noise. Here, I am starting off
 	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
-	INITIAL_NOISE_STD = 1.1
-	LAST_ITER_WITH_NOISE = 20000
+	INITIAL_NOISE_STD = 0.8
+	LAST_ITER_WITH_NOISE = 200
 	if iters_run >= LAST_ITER_WITH_NOISE:
 		return 0.0
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
@@ -242,6 +242,7 @@ with tf.Session() as sess:
 			# Train on same label batch
 			sess.run([generator_optimizer, encoder_optimizer], feed_dict_g)
 			sess.run([disc_optimizer], feed_dict_g)
+			sess.run([generator_optimizer, encoder_optimizer], feed_dict)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
 				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, encoder_optimizer, G_loss], feed_dict)
