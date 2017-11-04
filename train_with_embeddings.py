@@ -142,6 +142,7 @@ slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 gradient_penalty = tf.reduce_mean((slopes-1.)**2) * lambd
 
 D_loss = tf.add(D_real, D_fake, "disc_loss")
+D_loss += D_real_wrong
 
 # Commented out: Using minibatch similarity in the loss function. Too difficult to decide exactly how to weight this.
 # Minibatch_similarity_loss = tf.nn.l2_loss(minibatch_features_real, minibatch_features_fake, "minibatch_similarity_loss")
