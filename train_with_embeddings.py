@@ -122,7 +122,7 @@ mode_regularizer_loss = tf.reduce_mean(tf.log(D_mode_regularizer_prob))
 
 D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones_like(D_real_logits) * 0.8), name="disc_real_cross_entropy")
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)), name="disc_fake_cross_entropy")
-D_real_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_real_emoji_wrong_label_logits)), name="disc_fake_cross_entropy")
+D_real_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_emoji_wrong_label_logits, labels=tf.zeros_like(D_real_emoji_wrong_label_logits)), name="disc_fake_cross_entropy")
 D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
 
 # This is divided by 16*16 because that's dimension of the intermediate feature we pull out of D
