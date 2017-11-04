@@ -240,9 +240,8 @@ with tf.Session() as sess:
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
 			# Train on same label batch
-			sess.run([generator_optimizer, encoder_optimizer], feed_dict_g)
-			sess.run([disc_optimizer], feed_dict_g)
-			sess.run([generator_optimizer, encoder_optimizer], feed_dict)
+			# sess.run([generator_optimizer, encoder_optimizer], feed_dict_g)
+			# sess.run([disc_optimizer], feed_dict_g)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
 				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, encoder_optimizer, G_loss], feed_dict)
