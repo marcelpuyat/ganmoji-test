@@ -71,31 +71,31 @@ def Generator(z, reuse=False, name='g'):
 		G_1 = Dense(z, output_dim=1024*4*4, name='dense')
 		G_r1 = tf.reshape(G_1, [config.BATCH_SIZE, 4, 4, 1024])
 		G_bn1 = BatchNormalization(G_r1, name='dense_bn')
-		G_h1 = tf.nn.relu(G_bn1)
+		G_h1 = LeakyReLU(G_bn1)
 		with tf.name_scope('dense_activation'):
 			variable_summaries(G_h1)
 
 		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=config.BATCH_SIZE, name='deconv1')
 		G_bn2 = BatchNormalization(G_conv2, name='deconv1_bn')
-		G_h2 = tf.nn.relu(G_bn2)
+		G_h2 = LeakyReLU(G_bn2)
 		with tf.name_scope('deconv1_activation'):
 			variable_summaries(G_h2)
 
 		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=config.BATCH_SIZE, name='deconv2')
 		G_bn3 = BatchNormalization(G_conv3, name='deconv2_bn')
-		G_h3 = tf.nn.relu(G_bn3)
+		G_h3 = LeakyReLU(G_bn3)
 		with tf.name_scope('deconv2_activation'):
 			variable_summaries(G_h3)
 
 		G_conv4 = Deconv2d(G_h3, output_dim=128, batch_size=config.BATCH_SIZE, name='deconv3')
 		G_bn4 = BatchNormalization(G_conv4, name='deconv3_bn')
-		G_h4 = tf.nn.relu(G_bn4)
+		G_h4 = LeakyReLU(G_bn4)
 		with tf.name_scope('deconv3_activation'):
 			variable_summaries(G_h4)
 
 		G_conv5 = Deconv2d(G_h4, output_dim=64, batch_size=config.BATCH_SIZE, name='deconv4')
 		G_bn5 = BatchNormalization(G_conv5, name='deconv4_bn')
-		G_h5 = tf.nn.relu(G_bn5)
+		G_h5 = LeakyReLU(G_bn5)
 		with tf.name_scope('deconv4_activation'):
 			variable_summaries(G_h5)
 
@@ -126,7 +126,8 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 	# 	Then deconv with stride 2, 5x5 filters into 256*16*16, then BN
 	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
 	#   tanh
-	with tf.variable_scope(name):
+	with tf.variable_scope(name, reuse=reuse):
+		z = Dense(embeddings, output_dim=300, name='dense_z')
 		embeddings = Dense(embeddings, output_dim=300, name='dense_embeddings')
 		z_with_embeddings = tf.concat([z, embeddings], 1)
 		return Generator(z_with_embeddings, reuse, name)

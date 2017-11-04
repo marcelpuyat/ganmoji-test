@@ -139,7 +139,6 @@ slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 gradient_penalty = tf.reduce_mean((slopes-1.)**2) * lambd
 
 D_loss = tf.add(D_real, D_fake, "disc_loss")
-D_loss += gradient_penalty
 
 # Commented out: Using minibatch similarity in the loss function. Too difficult to decide exactly how to weight this.
 # Minibatch_similarity_loss = tf.nn.l2_loss(minibatch_features_real, minibatch_features_fake, "minibatch_similarity_loss")
@@ -193,7 +192,7 @@ def train(loss_tensor, params, learning_rate, beta1):
 # Learning rates decided upon by trial/error
 disc_optimizer = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
 generator_optimizer = train(G_loss, g_params, learning_rate=1e-4, beta1=0.5)
-encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
+# encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
 
 # Normal distribution centered around 0.0 with stddev 0.33, clipped at -1 and 1
 latent_space_sampler = truncnorm(a=-1/0.33, b=1/0.33, scale=0.33)
@@ -203,7 +202,7 @@ def get_instance_noise_std(iters_run):
 	# your images are with certain levels of noise. Here, I am starting off
 	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
 	INITIAL_NOISE_STD = 0.8
-	LAST_ITER_WITH_NOISE = 200
+	LAST_ITER_WITH_NOISE = 400
 	if iters_run >= LAST_ITER_WITH_NOISE:
 		return 0.0
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
@@ -243,11 +242,19 @@ with tf.Session() as sess:
 			# sess.run([generator_optimizer, encoder_optimizer], feed_dict_g)
 			# sess.run([disc_optimizer], feed_dict_g)
 
+			# Change latent space for next G
+			rand = latent_space_sampler.rvs((config.BATCH_SIZE, config.Z_DIM))
+			feed_dict[z] = rand
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
-				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, encoder_optimizer, G_loss], feed_dict)
+				summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
-				_, _, G_loss_curr = sess.run([generator_optimizer, encoder_optimizer, G_loss], feed_dict)
+				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
+
+			if G_loss_curr > D_loss_curr:
+				sess.run([generator_optimizer], feed_dict)
+			else:
+				sess.run([disc_optimizer], feed_dict)
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
 			sys.stdout.flush()
