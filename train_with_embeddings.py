@@ -141,7 +141,7 @@ gradients = tf.gradients(D_hat, [X_hat])[0]
 slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 gradient_penalty = tf.reduce_mean((slopes-1.)**2) * lambd
 
-D_loss = tf.add(D_real, D_fake, "disc_loss")
+D_loss = tf.add(D_real/2, D_fake/2, "disc_loss")
 D_loss += D_real_wrong
 
 # Commented out: Using minibatch similarity in the loss function. Too difficult to decide exactly how to weight this.
