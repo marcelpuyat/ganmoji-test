@@ -105,12 +105,14 @@ def get_next_image_batch(batch_size, same_labels=False):
 	return pixels_batch, embeddings_batch, labels
 
 X = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.IMAGE_SIZE], name="real_images_input")
+X_real_wrong = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.IMAGE_SIZE], name="real_images_input_wrong")
 z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, 100], name="generator_latent_space_input")
 embeddings = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.WORD_EMBEDDING_DIM], name="embeddings_input")
 instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_std")
 
 G = GeneratorWithEmbeddings(z, embeddings, False, 'Generator')
 D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, False, 'Discriminator')
+D_real_emoji_wrong_label_prob, D_real_emoji_wrong_label_logits, _, _ = DiscriminatorWithEmbeddings(X_real_wrong, embeddings, instance_noise_std, True, 'Discriminator')
 D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = DiscriminatorWithEmbeddings(G, embeddings, instance_noise_std, True, 'Discriminator')
 predicted_z = ModeEncoderWithEmbeddings(X, embeddings, 'ModeEncoder')
 image_from_predicted_z = GeneratorWithEmbeddings(predicted_z, embeddings, True, 'Generator')
@@ -120,6 +122,7 @@ mode_regularizer_loss = tf.reduce_mean(tf.log(D_mode_regularizer_prob))
 
 D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones_like(D_real_logits) * 0.8), name="disc_real_cross_entropy")
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)), name="disc_fake_cross_entropy")
+D_real_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_real_emoji_wrong_label_logits)), name="disc_fake_cross_entropy")
 D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
 
 # This is divided by 16*16 because that's dimension of the intermediate feature we pull out of D
@@ -175,6 +178,7 @@ tf.summary.scalar("minibatch_similarity_real", tf.reduce_mean(minibatch_similari
 tf.summary.scalar("minibatch_similarity_fake", tf.reduce_mean(minibatch_similarity_fake))
 tf.summary.scalar("d_real_prob", tf.reduce_mean(D_real_prob))
 tf.summary.scalar("d_fake_prob", tf.reduce_mean(D_fake_prob))
+tf.summary.scalar("d_real_wrong_prob", tf.reduce_mean(D_real_emoji_wrong_label_prob))
 
 vars = tf.trainable_variables()
 d_params = [v for v in vars if v.name.startswith('Discriminator/')]
@@ -229,13 +233,14 @@ with tf.Session() as sess:
 			instance_noise_std_value = get_instance_noise_std(curr_step)
 
 			x, label_embeddings, labels = get_next_image_batch(config.BATCH_SIZE)
+			x_real_wrong, _, _ = get_next_image_batch(config.BATCH_SIZE)
 			x_g, label_embeddings_g, labels_g = get_next_image_batch(config.BATCH_SIZE, same_labels=True)
 			x = utils.normalize_image_batch(x)
 			x_g = utils.normalize_image_batch(x_g)
 
 			rand = latent_space_sampler.rvs((config.BATCH_SIZE, config.Z_DIM))
-			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings}
-			feed_dict_g = {X: x_g, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings_g}
+			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings, X_real_wrong: x_real_wrong}
+			feed_dict_g = {X: x_g, z: rand, instance_noise_std: instance_noise_std_value, embeddings: label_embeddings_g, X_real_wrong: x_real_wrong}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
 			# Train on same label batch
