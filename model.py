@@ -31,32 +31,33 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 	# 	Conv3x3, BN, ReLU
 
 	# Decaying noise
-	X = gaussian_noise_layer(X, instance_noise_std)
-	if len(X.get_shape()) > 2:
-		# X: -1, 32, 32, 4
-		D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='conv1')
-	else:
-		D_reshaped = tf.reshape(X, [config.BATCH_SIZE, 128, 128, 4])
-		D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='conv1')
+	with tf.variable_scope(name, reuse=reuse):
+		X = gaussian_noise_layer(X, instance_noise_std)
+		if len(X.get_shape()) > 2:
+			# X: -1, 32, 32, 4
+			D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='conv1')
+		else:
+			D_reshaped = tf.reshape(X, [config.BATCH_SIZE, 128, 128, 4])
+			D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='conv1')
 
-	D_conv1_reshaped = tf.reshape(D_conv1, [config.BATCH_SIZE, -1])
-	minibatch_features = minibatch(D_conv1_reshaped)
+		D_conv1_reshaped = tf.reshape(D_conv1, [config.BATCH_SIZE, -1])
+		minibatch_features = minibatch(D_conv1_reshaped)
 
-	D_bn1 = BatchNormalization(D_conv1, name='conv_bn1')
-	D_h1 = LeakyReLU(D_bn1)
+		D_bn1 = BatchNormalization(D_conv1, name='conv_bn1')
+		D_h1 = LeakyReLU(D_bn1)
 
-	D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='conv2')
-	D_bn2 = BatchNormalization(D_conv2, name='conv_bn2')
-	D_h2 = LeakyReLU(D_bn2)
-	D_conv3 = Conv2d(D_h2, output_dim=128, kernel=(3,3), name='conv3')
-	D_bn3 = BatchNormalization(D_conv3, name='conv_bn3')
-	D_h3 = LeakyReLU(D_bn3)
-	D_conv4 = Conv2d(D_h3, output_dim=256, kernel=(3,3), name='conv4')
-	D_bn4 = BatchNormalization(D_conv4, name='conv_bn4')
-	D_h4 = LeakyReLU(D_bn4)
+		D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='conv2')
+		D_bn2 = BatchNormalization(D_conv2, name='conv_bn2')
+		D_h2 = LeakyReLU(D_bn2)
+		D_conv3 = Conv2d(D_h2, output_dim=128, kernel=(3,3), name='conv3')
+		D_bn3 = BatchNormalization(D_conv3, name='conv_bn3')
+		D_h3 = LeakyReLU(D_bn3)
+		D_conv4 = Conv2d(D_h3, output_dim=256, kernel=(3,3), name='conv4')
+		D_bn4 = BatchNormalization(D_conv4, name='conv_bn4')
+		D_h4 = LeakyReLU(D_bn4)
 
-	D_r = tf.reshape(D_h4, [config.BATCH_SIZE, 16384])
-	return D_r, D_conv4, minibatch_features
+		D_r = tf.reshape(D_h4, [config.BATCH_SIZE, 16384])
+		return D_r, D_conv4, minibatch_features
 
 
 def Generator(z, reuse=False, name='g'):
