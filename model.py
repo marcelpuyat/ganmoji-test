@@ -127,9 +127,11 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 	# 	Then deconv with stride 2, 5x5 filters into 4*32*32
 	#   tanh
 	with tf.variable_scope(name, reuse=reuse):
-		z = Dense(embeddings, output_dim=300, name='dense_z')
-		embeddings = Dense(embeddings, output_dim=300, name='dense_embeddings')
-		z_with_embeddings = tf.concat([z, embeddings], 1)
+		# First, conditioning augmentation based on StackGAN. We let the Generator learn a Mu and Sigma:
+		mu = Dense(embeddings, output_dim=1, name='mu')
+		sigma = Dense(embeddings, output_dim=1, name='sigma')
+		c_hat = tf.random_normal(shape=tf.shape(100), mean=mu, stddev=sigma, dtype=tf.float32) 
+		z_with_embeddings = tf.concat([z, c_hat], 1)
 		return Generator(z_with_embeddings, reuse, name)
 
 def DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, reuse=False, name='d'):
