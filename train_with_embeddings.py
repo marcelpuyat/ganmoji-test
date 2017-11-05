@@ -207,7 +207,7 @@ def get_instance_noise_std(iters_run):
 	# your images are with certain levels of noise. Here, I am starting off
 	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
 	INITIAL_NOISE_STD = 0.8
-	LAST_ITER_WITH_NOISE = 400
+	LAST_ITER_WITH_NOISE = 5000
 	if iters_run >= LAST_ITER_WITH_NOISE:
 		return 0.0
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
