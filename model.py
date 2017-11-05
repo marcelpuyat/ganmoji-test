@@ -75,31 +75,52 @@ def Generator(z, reuse=False, name='g'):
 		with tf.name_scope('dense_activation'):
 			variable_summaries(G_h1)
 
-		G_conv2 = Deconv2d(G_h1, output_dim=512, batch_size=config.BATCH_SIZE, name='deconv1')
+
+		conv1 = Conv2d(G_h1, output_dim=1024, kernel=(3,3), strides=(1,1), name='conv1')
+		conv1_bn = BatchNormalization(conv1, name='conv1_bn')
+		conv1_h1 = LeakyReLU(conv1_bn)
+
+		G_conv2 = Deconv2d(conv1_h1, output_dim=512, batch_size=config.BATCH_SIZE, name='deconv1')
 		G_bn2 = BatchNormalization(G_conv2, name='deconv1_bn')
 		G_h2 = LeakyReLU(G_bn2)
 		with tf.name_scope('deconv1_activation'):
 			variable_summaries(G_h2)
 
-		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=config.BATCH_SIZE, name='deconv2')
+		conv2 = Conv2d(G_h2, output_dim=512, kernel=(3,3), strides=(1,1), name='conv2')
+		conv2_bn = BatchNormalization(conv2, name='conv2_bn')
+		conv2_h = LeakyReLU(conv2_bn)
+
+		G_conv3 = Deconv2d(conv2_h, output_dim=256, batch_size=config.BATCH_SIZE, name='deconv2')
 		G_bn3 = BatchNormalization(G_conv3, name='deconv2_bn')
 		G_h3 = LeakyReLU(G_bn3)
 		with tf.name_scope('deconv2_activation'):
 			variable_summaries(G_h3)
 
-		G_conv4 = Deconv2d(G_h3, output_dim=128, batch_size=config.BATCH_SIZE, name='deconv3')
+		conv3 = Conv2d(G_h3, output_dim=256, kernel=(3,3), strides=(1,1), name='conv3')
+		conv3_bn = BatchNormalization(conv3, name='conv3_bn')
+		conv3_h = LeakyReLU(conv3_bn)
+
+		G_conv4 = Deconv2d(conv3_h, output_dim=128, batch_size=config.BATCH_SIZE, name='deconv3')
 		G_bn4 = BatchNormalization(G_conv4, name='deconv3_bn')
 		G_h4 = LeakyReLU(G_bn4)
 		with tf.name_scope('deconv3_activation'):
 			variable_summaries(G_h4)
 
-		G_conv5 = Deconv2d(G_h4, output_dim=64, batch_size=config.BATCH_SIZE, name='deconv4')
+		conv4 = Conv2d(G_h4, output_dim=128, kernel=(3,3), strides=(1,1), name='conv4')
+		conv4_bn = BatchNormalization(conv4, name='conv4_bn')
+		conv4_h = LeakyReLU(conv4_bn)
+
+		G_conv5 = Deconv2d(conv4_h, output_dim=64, batch_size=config.BATCH_SIZE, name='deconv4')
 		G_bn5 = BatchNormalization(G_conv5, name='deconv4_bn')
 		G_h5 = LeakyReLU(G_bn5)
 		with tf.name_scope('deconv4_activation'):
 			variable_summaries(G_h5)
 
-		G_conv6 = Deconv2d(G_h5, output_dim=4, batch_size=config.BATCH_SIZE, name='deconv5')
+		conv5 = Conv2d(G_h5, output_dim=64, kernel=(3,3), strides=(1,1), name='conv5')
+		conv5_bn = BatchNormalization(conv5, name='conv5_bn')
+		conv5_h = LeakyReLU(conv5_bn)
+
+		G_conv6 = Deconv2d(conv5_h, output_dim=4, batch_size=config.BATCH_SIZE, name='deconv5')
 		G_r6 = tf.reshape(G_conv6, [config.BATCH_SIZE, 128*128*4])
 		tanh_layer = tf.nn.tanh(G_r6)
 		with tf.name_scope('tanh'):
@@ -140,7 +161,7 @@ def DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, reuse=False, 
 		D_r_dropped_out = tf.nn.dropout(D_r, 0.8)
 		D_h6_with_embeddings = tf.concat([D_r, embeddings], 1)
 		D_h6_with_minibatch = tf.concat([D_h6_with_embeddings, minibatch_features], 1)
-		D_h6 = Dense(D_h6_with_embeddings, output_dim=1, name='dense')
+		D_h6 = Dense(D_h6_with_minibatch, output_dim=1, name='dense')
 		preds = tf.nn.sigmoid(D_h6, name='predictions')
 		with tf.name_scope('discrim_preds'):
 			variable_summaries(preds)
