@@ -60,7 +60,7 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 		return D_r, D_conv4, minibatch_features
 
 
-def Generator(z, reuse=False, name='g'):
+def Generator(z, c, reuse=False, name='g'):
 	# Architecture:
 	# 	Project to 1024*4*4 then reshape, then BN
 	# 	Then deconv with stride 2, 5x5 filters into 512*8*8, then BN
@@ -78,6 +78,7 @@ def Generator(z, reuse=False, name='g'):
 
 
 		conv1 = Conv2d(G_h1, output_dim=1024, kernel=(3,3), strides=(1,1), name='conv1')
+		conv1 += tf.reshape(Dense(c, output_dim=4*4*1024, name='densec1'), [config.BATCH_SIZE, 4, 4, 1024])
 		conv1_bn = BatchNormalization(conv1, name='conv1_bn')
 		conv1_h1 = LeakyReLU(conv1_bn)
 
@@ -88,6 +89,7 @@ def Generator(z, reuse=False, name='g'):
 			variable_summaries(G_h2)
 
 		conv2 = Conv2d(G_h2, output_dim=512, kernel=(3,3), strides=(1,1), name='conv2')
+		conv2 += tf.reshape(Dense(c, output_dim=8*8*512, name='densec2'), [config.BATCH_SIZE, 8, 8, 512])
 		conv2_bn = BatchNormalization(conv2, name='conv2_bn')
 		conv2_h = LeakyReLU(conv2_bn)
 
@@ -98,6 +100,7 @@ def Generator(z, reuse=False, name='g'):
 			variable_summaries(G_h3)
 
 		conv3 = Conv2d(G_h3, output_dim=256, kernel=(3,3), strides=(1,1), name='conv3')
+		conv3 += tf.reshape(Dense(c, output_dim=16*16*256, name='densec3'), [config.BATCH_SIZE, 16, 16, 256])
 		conv3_bn = BatchNormalization(conv3, name='conv3_bn')
 		conv3_h = LeakyReLU(conv3_bn)
 
@@ -108,6 +111,7 @@ def Generator(z, reuse=False, name='g'):
 			variable_summaries(G_h4)
 
 		conv4 = Conv2d(G_h4, output_dim=128, kernel=(3,3), strides=(1,1), name='conv4')
+		conv4 += tf.reshape(Dense(c, output_dim=32*32*128, name='densec4'), [config.BATCH_SIZE, 32, 32, 128])
 		conv4_bn = BatchNormalization(conv4, name='conv4_bn')
 		conv4_h = LeakyReLU(conv4_bn)
 
@@ -118,6 +122,7 @@ def Generator(z, reuse=False, name='g'):
 			variable_summaries(G_h5)
 
 		conv5 = Conv2d(G_h5, output_dim=64, kernel=(3,3), strides=(1,1), name='conv5')
+		conv5 += tf.reshape(Dense(c, output_dim=64*64*64, name='densec5'), [config.BATCH_SIZE, 64, 64, 64])
 		conv5_bn = BatchNormalization(conv5, name='conv5_bn')
 		conv5_h = LeakyReLU(conv5_bn)
 
@@ -154,7 +159,7 @@ def GeneratorWithEmbeddings(z, embeddings, reuse, name='g'):
 		sigma = Dense(embeddings, output_dim=1, name='sigma')
 		c_hat = tf.random_normal(shape=tf.shape(100), mean=mu, stddev=sigma, dtype=tf.float32) 
 		z_with_embeddings = tf.concat([z, c_hat], 1)
-		return Generator(z_with_embeddings, reuse, name)
+		return Generator(z_with_embeddings, c_hat, reuse, name)
 
 def DiscriminatorWithEmbeddings(X, embeddings, instance_noise_std, reuse=False, name='d'):
 	with tf.variable_scope(name, reuse=reuse):
