@@ -57,8 +57,9 @@ feature_matching_lambda = 0.01
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
-G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss
-E_loss = l2_distance_encoder + mode_regularizer_loss
+# G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss
+G_loss = D_fake_wrong
+# E_loss = l2_distance_encoder + mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
 tf.summary.scalar("D_fake_loss", D_fake)
@@ -66,7 +67,7 @@ tf.summary.scalar("D_fake_wrong", D_fake_wrong)
 tf.summary.scalar("gradient_penalty", gradient_penalty)
 tf.summary.scalar("feature_matching_loss", feature_matching_loss)
 tf.summary.scalar("G_loss", G_loss)
-tf.summary.scalar("E_loss", E_loss)
+# tf.summary.scalar("E_loss", E_loss)
 tf.summary.scalar("mode_regularizer_loss", mode_regularizer_loss)
 tf.summary.scalar("l2_distance_encoder", l2_distance_encoder)
 tf.summary.scalar("instance_noise_std", instance_noise_std)
@@ -91,7 +92,7 @@ def train(loss_tensor, params, learning_rate, beta1):
 # Learning rates decided upon by trial/error
 disc_optimizer = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
 generator_optimizer = train(G_loss, g_params, learning_rate=1e-4, beta1=0.5)
-encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
+# encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
 
 def get_instance_noise_std(iters_run):
 	# Instance noise, motivated by: http://www.inference.vc/instance-noise-a-trick-for-stabilising-gan-training/
@@ -128,17 +129,15 @@ with tf.Session() as sess:
 			x = utils.get_next_image_batch(config.BATCH_SIZE)
 			x = utils.normalize_image_batch(x)
 
-			after_normalizing = time.time()
-
 			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, config.Z_DIM]).astype(np.float32)
 			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value}
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
-				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, encoder_optimizer, G_loss], feed_dict)
+				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
-				_, _, G_loss_curr = sess.run([generator_optimizer, encoder_optimizer, G_loss], feed_dict)
+				_, _, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
 			sys.stdout.flush()

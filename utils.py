@@ -26,7 +26,7 @@ def denormalize_image(image):
 image_metadata = []
 
 def get_image_metadata():
-	with open('emoji_images_high_quality.json') as data_file:    
+	with open('emoji_images_high_quality_medium.json') as data_file:    
 		data = json.load(data_file)
 		shuffle(data)
 		return data
