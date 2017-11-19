@@ -131,9 +131,9 @@ with tf.Session() as sess:
 
 			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, config.Z_DIM]).astype(np.float32)
 			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value}
-			D_loss_curr = sess.run([D_loss], feed_dict)
+			D_loss_curr = sess.run(D_loss, feed_dict)
 			if D_loss_curr > 1.2:
-				sess.run([disc_optimizer], feed_dict)
+				sess.run(disc_optimizer, feed_dict)
 			else:
 				print("Skipping disc train iter")
 
