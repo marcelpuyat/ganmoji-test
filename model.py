@@ -40,7 +40,7 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 		# X: -1, 32, 32, 4
 		D_conv1 = Conv2d(X, output_dim=32, kernel=(3,3), name='conv1')
 	else:
-		D_reshaped = tf.reshape(X, [config.BATCH_SIZE, 128, 128, 4])
+		D_reshaped = tf.reshape(X, [config.BATCH_SIZE, 64, 64, 4])
 		D_conv1 = Conv2d(D_reshaped, output_dim=32, kernel=(3,3), name='conv1')
 
 	D_conv1_reshaped = tf.reshape(D_conv1, [config.BATCH_SIZE, -1])
@@ -59,7 +59,7 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 	D_bn4 = BatchNormalization(D_conv4, name='conv_bn4')
 	D_h4 = LeakyReLU(D_bn4)
 
-	D_r = tf.reshape(D_h4, [config.BATCH_SIZE, 16384])
+	D_r = tf.reshape(D_h4, [config.BATCH_SIZE, 4096])
 	return D_r, D_conv3, minibatch_features
 
 
@@ -85,11 +85,7 @@ def Generator(z, reuse=False, name='g'):
 		with tf.name_scope('deconv1_activation'):
 			variable_summaries(G_h2)
 
-		extra_layer_conv = Conv2d(G_h2, output_dim=512, kernel=(3,3), strides=(1,1), name='conv_extra')
-		extra_layer_bn = BatchNormalization(extra_layer_conv, name="conv_extra_bn")
-		extra_layer_relu = LeakyReLU(extra_layer_bn)
-
-		G_conv3 = Deconv2d(extra_layer_relu, output_dim=256, batch_size=config.BATCH_SIZE, name='deconv2')
+		G_conv3 = Deconv2d(G_h2, output_dim=256, batch_size=config.BATCH_SIZE, name='deconv2')
 		G_bn3 = BatchNormalization(G_conv3, name='deconv2_bn')
 		G_h3 = LeakyReLU(G_bn3)
 		with tf.name_scope('deconv2_activation'):
@@ -101,18 +97,8 @@ def Generator(z, reuse=False, name='g'):
 		with tf.name_scope('deconv3_activation'):
 			variable_summaries(G_h4)
 
-		extra_layer_conv_2 = Conv2d(G_h4, output_dim=128, kernel=(3,3), strides=(1,1), name='conv_extra2')
-		extra_layer_bn_2 = BatchNormalization(extra_layer_conv_2, name="conv_extra_bn2")
-		extra_layer_relu_2 = LeakyReLU(extra_layer_bn_2)
-
-		G_conv5 = Deconv2d(extra_layer_relu_2, output_dim=64, batch_size=config.BATCH_SIZE, name='deconv4')
-		G_bn5 = BatchNormalization(G_conv5, name='deconv4_bn')
-		G_h5 = LeakyReLU(G_bn5)
-		with tf.name_scope('deconv4_activation'):
-			variable_summaries(G_h5)
-
-		G_conv6 = Deconv2d(G_h5, output_dim=4, batch_size=config.BATCH_SIZE, name='deconv5')
-		G_r6 = tf.reshape(G_conv6, [config.BATCH_SIZE, 128*128*4])
+		G_conv6 = Deconv2d(G_h4, output_dim=4, batch_size=config.BATCH_SIZE, name='deconv5')
+		G_r6 = tf.reshape(G_conv6, [config.BATCH_SIZE, 64*64*4])
 		tanh_layer = tf.nn.tanh(G_r6)
 		with tf.name_scope('tanh'):
 			variable_summaries(tanh_layer)
