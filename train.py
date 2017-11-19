@@ -91,7 +91,7 @@ def train(loss_tensor, params, learning_rate, beta1):
 
 # Learning rates decided upon by trial/error
 disc_optimizer = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
-generator_optimizer = train(G_loss, g_params, learning_rate=5e-4, beta1=0.5)
+generator_optimizer = train(G_loss, g_params, learning_rate=2e-4, beta1=0.5)
 # encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
 
 def get_instance_noise_std(iters_run):
@@ -135,15 +135,10 @@ with tf.Session() as sess:
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
 				summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
-				summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
 				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
-				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
-				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
-				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
-				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
-				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
+
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
 			sys.stdout.flush()
