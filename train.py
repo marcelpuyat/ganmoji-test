@@ -53,12 +53,11 @@ D_loss = tf.add(D_real, D_fake, "disc_loss")
 # Both techniques are dicussed here: https://arxiv.org/abs/1606.03498
 encoder_lambda_1 = 0.01
 encoder_lambda_2 = 0.1
-feature_matching_lambda = 0.01
+feature_matching_lambda = 0.04
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
-# G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss
-G_loss = D_fake_wrong
+G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss
 # E_loss = l2_distance_encoder + mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
@@ -121,7 +120,7 @@ with tf.Session() as sess:
 	else:
 		print(" [!] Load failed...")
 
-	G_loss_curr = 0
+	D_fake_wrong_curr = 0
 	for e in range(config.EPOCHS):
 		for _ in range(config.ITERATIONS):
 
@@ -133,16 +132,16 @@ with tf.Session() as sess:
 			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, config.Z_DIM]).astype(np.float32)
 			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value}
 			D_loss_curr = sess.run(D_loss, feed_dict)
-			if G_loss_curr < 0.80:
+			if D_fake_wrong_curr < 0.60:
 				sess.run(disc_optimizer, feed_dict)
 			else:
 				print("Skipping disc train iter")
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
-				summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
+				summary, _, G_loss_curr, D_fake_wrong_curr = sess.run([merged, generator_optimizer, G_loss, D_fake_wrong], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
-				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
+				_, G_loss_curr, D_fake_wrong_curr = sess.run([generator_optimizer, G_loss, D_fake_wrong], feed_dict)
 
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
