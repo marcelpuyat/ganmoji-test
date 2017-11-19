@@ -134,10 +134,10 @@ with tf.Session() as sess:
 			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
-				summary, _, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
+				summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
-				_, _, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
+				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
 			sys.stdout.flush()
