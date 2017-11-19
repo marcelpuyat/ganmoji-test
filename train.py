@@ -57,7 +57,7 @@ feature_matching_lambda = 0.04
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
-G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss + feature_matching_loss
+G_loss = D_fake_wrong + feature_matching_loss
 # E_loss = l2_distance_encoder + mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
