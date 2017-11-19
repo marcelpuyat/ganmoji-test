@@ -46,7 +46,7 @@ slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 gradient_penalty = tf.reduce_mean((slopes-1.)**2) * lambd
 
 D_loss = tf.add(D_real, D_fake, "disc_loss")
-D_loss += gradient_penalty
+# D_loss += gradient_penalty
 
 # Generator tries to maximize log(D_fake), and I incorporate Feature Matching into the loss function. 
 # Also mode regularizer and l2_distance_encoder from MRGAN
@@ -131,7 +131,11 @@ with tf.Session() as sess:
 
 			rand = np.random.uniform(0., 1., size=[config.BATCH_SIZE, config.Z_DIM]).astype(np.float32)
 			feed_dict = {X: x, z: rand, instance_noise_std: instance_noise_std_value}
-			_, D_loss_curr = sess.run([disc_optimizer, D_loss], feed_dict)
+			D_loss_curr = sess.run([D_loss], feed_dict)
+			if D_loss_curr > 1.2:
+				sess.run([disc_optimizer], feed_dict)
+			else:
+				print("Skipping disc train iter")
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
 				summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
