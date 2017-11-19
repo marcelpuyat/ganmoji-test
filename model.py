@@ -19,7 +19,7 @@ def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 
 		D_5 = tf.concat([D_r_dropped_out, minibatch_features_dropped_out], 1)
 
-		D_h6 = Dense(D_r, output_dim=1, name='dense')
+		D_h6 = Dense(D_5, output_dim=1, name='dense')
 		preds = tf.nn.sigmoid(D_h6, name='predictions')
 		with tf.name_scope('discrim_preds'):
 			variable_summaries(preds)
