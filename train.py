@@ -89,8 +89,8 @@ def train(loss_tensor, params, learning_rate, beta1):
 	return optimizer.apply_gradients(grads)
 
 # Learning rates decided upon by trial/error
-disc_optimizer = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
-generator_optimizer = train(G_loss, g_params, learning_rate=2e-4, beta1=0.5)
+disc_optimizer = train(D_loss, d_params, learning_rate=1e-4, beta1=0.9)
+generator_optimizer = train(G_loss, g_params, learning_rate=1e-3, beta1=0.9)
 # encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
 
 def get_instance_noise_std(iters_run):
