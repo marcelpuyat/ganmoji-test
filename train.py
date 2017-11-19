@@ -99,8 +99,8 @@ def get_instance_noise_std(iters_run):
 	# Heuristic: Values are probably best determined by seeing how identifiable
 	# your images are with certain levels of noise. Here, I am starting off
 	# with INITIAL_NOISE_STD and decreasing uniformly, hitting zero at a threshold iteration.
-	INITIAL_NOISE_STD = 0.3
-	LAST_ITER_WITH_NOISE = 2000
+	INITIAL_NOISE_STD = 0.4
+	LAST_ITER_WITH_NOISE = 50000
 	if iters_run >= LAST_ITER_WITH_NOISE:
 		return 0.0
 	return INITIAL_NOISE_STD - ((INITIAL_NOISE_STD/LAST_ITER_WITH_NOISE) * iters_run)
@@ -135,8 +135,10 @@ with tf.Session() as sess:
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
 				summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
+				summary, _, G_loss_curr = sess.run([merged, generator_optimizer, G_loss], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
+				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
 				_, G_loss_curr = sess.run([generator_optimizer, G_loss], feed_dict)
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
