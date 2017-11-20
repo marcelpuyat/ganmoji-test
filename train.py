@@ -21,13 +21,16 @@ D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = D
 D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = Discriminator(G, instance_noise_std, True, 'Discriminator')
 predicted_z = ModeEncoder(X, 'ModeEncoder')
 image_from_predicted_z = Generator(predicted_z, True, 'Generator')
+encoder_diff_max = tf.reduce_max(tf.subtract(X, image_from_predicted_z))
+encoder_diff_max_square = tf.reduce_max(tf.square(tf.subtract(X, image_from_predicted_z)))
+encoder_diff_sum = tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z)))
 l2_distance_encoder = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z))))
 D_mode_regularizer_prob,_,_,_ = Discriminator(image_from_predicted_z, 0, True, 'Discriminator')
 mode_regularizer_loss = tf.reduce_mean(tf.log(D_mode_regularizer_prob))
 
 D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones_like(D_real_logits)), name="disc_real_cross_entropy")
 D_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros_like(D_fake_logits)), name="disc_fake_cross_entropy")
-D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
+# D_fake_wrong = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones_like(D_fake_logits)), name="generator_wrong_fake_cross_entropy")
 
 # This is divided by 16*16 because that's dimension of the intermediate feature we pull out of D
 feature_matching_loss = tf.divide(tf.reduce_mean(tf.nn.l2_loss(feature_matching_real - feature_matching_fake)), (float(16) * 16), name="feature_matching_loss")
@@ -57,12 +60,12 @@ feature_matching_lambda = 0.04
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
-G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss
+G_loss = -D_fake + l2_distance_encoder + mode_regularizer_loss
 E_loss = l2_distance_encoder + mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
 tf.summary.scalar("D_fake_loss", D_fake)
-tf.summary.scalar("D_fake_wrong", D_fake_wrong)
+# tf.summary.scalar("D_fake_wrong", D_fake_wrong)
 tf.summary.scalar("gradient_penalty", gradient_penalty)
 tf.summary.scalar("feature_matching_loss", feature_matching_loss)
 tf.summary.scalar("G_loss", G_loss)
@@ -74,6 +77,9 @@ tf.summary.scalar("minibatch_similarity_real", tf.reduce_mean(minibatch_similari
 tf.summary.scalar("minibatch_similarity_fake", tf.reduce_mean(minibatch_similarity_fake))
 tf.summary.scalar("d_real_prob", tf.reduce_mean(D_real_prob))
 tf.summary.scalar("d_fake_prob", tf.reduce_mean(D_fake_prob))
+tf.summary.scalar("encoder_diff_sum", encoder_diff_sum)
+tf.summary.scalar("encoder_diff_max", encoder_diff_max)
+tf.summary.scalar("encoder_diff_max_square", encoder_diff_max_square)
 
 vars = tf.trainable_variables()
 d_params = [v for v in vars if v.name.startswith('Discriminator/')]
@@ -139,10 +145,10 @@ with tf.Session() as sess:
 			# 	print("Skipping disc train iter")
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
-				summary, _, G_loss_curr, D_fake_wrong_curr, _ = sess.run([merged, generator_optimizer, G_loss, D_fake_wrong, encoder_optimizer], feed_dict)
+				summary, _, G_loss_curr, _ = sess.run([merged, generator_optimizer, G_loss, encoder_optimizer], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
-				_, G_loss_curr, D_fake_wrong_curr, _ = sess.run([generator_optimizer, G_loss, D_fake_wrong, encoder_optimizer], feed_dict)
+				_, G_loss_curr, _ = sess.run([generator_optimizer, G_loss, encoder_optimizer], feed_dict)
 
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
