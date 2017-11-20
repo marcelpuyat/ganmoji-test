@@ -10,15 +10,16 @@ def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 	with tf.variable_scope(name, reuse=reuse):
 		D_r, D_h4, minibatch_features = DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse, name)
 
-		# # Apply strong dropout on minibatch features because we care less about it compared to image features
-		minibatch_features_dropped_out = tf.nn.dropout(minibatch_features, 0.4)
+		# # # Apply strong dropout on minibatch features because we care less about it compared to image features
+		# minibatch_features_dropped_out = tf.nn.dropout(minibatch_features, 0.4)
 
-		# # Only a bit of dropout for image features to prevent overfitting
-		D_r_dropped_out = tf.nn.dropout(D_r, 0.8)
+		# # # Only a bit of dropout for image features to prevent overfitting
+		# D_r_dropped_out = tf.nn.dropout(D_r, 0.8)
 
-		D_5 = tf.concat([D_r_dropped_out, minibatch_features_dropped_out], 1)
+		# D_5 = tf.concat([D_r_dropped_out, minibatch_features_dropped_out], 1)
 
-		D_h6 = Dense(D_5, output_dim=1, name='dense')
+		D_h6 = Dense(D_r, output_dim=1, name='dense')
+		D_h6 = tf.nn.dropout(D_h6, 0.6)
 		preds = tf.nn.sigmoid(D_h6, name='predictions')
 		with tf.name_scope('discrim_preds'):
 			variable_summaries(preds)

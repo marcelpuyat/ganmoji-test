@@ -57,8 +57,8 @@ feature_matching_lambda = 0.04
 l2_distance_encoder *= encoder_lambda_1
 mode_regularizer_loss *= encoder_lambda_2
 feature_matching_loss *= feature_matching_lambda
-G_loss = D_fake_wrong
-# E_loss = l2_distance_encoder + mode_regularizer_loss
+G_loss = D_fake_wrong + l2_distance_encoder + mode_regularizer_loss
+E_loss = l2_distance_encoder + mode_regularizer_loss
 
 tf.summary.scalar("D_real_loss", D_real)
 tf.summary.scalar("D_fake_loss", D_fake)
@@ -91,7 +91,7 @@ def train(loss_tensor, params, learning_rate, beta1):
 # Learning rates decided upon by trial/error
 disc_optimizer = train(D_loss, d_params, learning_rate=1e-4, beta1=0.5)
 generator_optimizer = train(G_loss, g_params, learning_rate=2e-4, beta1=0.5)
-# encoder_optimizer = train(E_loss, e_params, learning_rate=1e-4, beta1=0.5)
+encoder_optimizer = train(E_loss, e_params, learning_rate=2e-4, beta1=0.5)
 
 def get_instance_noise_std(iters_run):
 	# Instance noise, motivated by: http://www.inference.vc/instance-noise-a-trick-for-stabilising-gan-training/
@@ -139,10 +139,10 @@ with tf.Session() as sess:
 			# 	print("Skipping disc train iter")
 
 			if curr_step > 0 and curr_step % config.STEPS_PER_SUMMARY == 0:
-				summary, _, G_loss_curr, D_fake_wrong_curr = sess.run([merged, generator_optimizer, G_loss, D_fake_wrong], feed_dict)
+				summary, _, G_loss_curr, D_fake_wrong_curr, _ = sess.run([merged, generator_optimizer, G_loss, D_fake_wrong, encoder_optimizer], feed_dict)
 				train_writer.add_summary(summary, curr_step)
 			else:
-				_, G_loss_curr, D_fake_wrong_curr = sess.run([generator_optimizer, G_loss, D_fake_wrong], feed_dict)
+				_, G_loss_curr, D_fake_wrong_curr, _ = sess.run([generator_optimizer, G_loss, D_fake_wrong, encoder_optimizer], feed_dict)
 
 
 			sys.stdout.write("\rstep %d: %f, %f" % (curr_step, D_loss_curr, G_loss_curr))
