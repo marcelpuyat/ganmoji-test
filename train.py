@@ -17,15 +17,15 @@ z = tf.placeholder(tf.float32, shape=[config.BATCH_SIZE, config.Z_DIM], name="ge
 instance_noise_std = tf.placeholder(tf.float32, shape=(), name="instance_noise_std")
 
 G = Generator(z, False, 'Generator')
-D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = Discriminator(X, instance_noise_std, False, 'Discriminator')
-D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = Discriminator(G, instance_noise_std, True, 'Discriminator')
+D_real_prob, D_real_logits, feature_matching_real, minibatch_similarity_real = Discriminator(X, instance_noise_std, None, False, 'Discriminator')
+D_fake_prob, D_fake_logits, feature_matching_fake, minibatch_similarity_fake = Discriminator(G, instance_noise_std, 'NO_OPS', True, 'Discriminator')
 predicted_z = ModeEncoder(X, 'ModeEncoder')
 image_from_predicted_z = Generator(predicted_z, True, 'Generator')
 encoder_diff_max = tf.reduce_max(tf.subtract(X, image_from_predicted_z))
 encoder_diff_max_square = tf.reduce_max(tf.square(tf.subtract(X, image_from_predicted_z)))
 encoder_diff_sum = tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z)))
 l2_distance_encoder = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(X, image_from_predicted_z))))
-D_mode_regularizer_prob,_,_,_ = Discriminator(image_from_predicted_z, 0, True, 'Discriminator')
+D_mode_regularizer_prob,_,_,_ = Discriminator(image_from_predicted_z, 0, 'NO_OPS', True, 'Discriminator')
 mode_regularizer_loss = tf.reduce_mean(tf.log(D_mode_regularizer_prob))
 
 D_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones_like(D_real_logits)), name="disc_real_cross_entropy")
@@ -43,7 +43,7 @@ alpha = tf.random_uniform(
 	maxval=1.
 )
 X_hat = alpha*X + (1-alpha)*G
-D_hat,_,_,_ = Discriminator(X_hat, instance_noise_std, True, 'Discriminator')
+D_hat,_,_,_ = Discriminator(X_hat, instance_noise_std, 'NO_OPS', True, 'Discriminator')
 gradients = tf.gradients(D_hat, [X_hat])[0]
 slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1]))
 gradient_penalty = tf.reduce_mean((slopes-1.)**2) * lambd

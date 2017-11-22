@@ -2,13 +2,13 @@ import tensorflow as tf
 from ops import *
 import config
 
-def Discriminator(X, instance_noise_std, reuse=False, name='d'):
+def Discriminator(X, instance_noise_std, update_collection=None, reuse=False, name='d'):
 	# Architecture:
 	#   DiscriminatorBeforeFullyConnectedLayer plus:
 	# 	FC layer
 	# 	Sigmoid
 	with tf.variable_scope(name, reuse=reuse):
-		D_r, D_h4, minibatch_features = DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse, name)
+		D_r, D_h4, minibatch_features = DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, update_collection, reuse, name)
 
 		# # # Apply strong dropout on minibatch features because we care less about it compared to image features
 		# minibatch_features_dropped_out = tf.nn.dropout(minibatch_features, 0.4)
@@ -25,7 +25,7 @@ def Discriminator(X, instance_noise_std, reuse=False, name='d'):
 			variable_summaries(preds)
 		return preds, D_h6, D_h4, minibatch_features
 
-def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, name='d'):
+def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, collections=None, reuse=False, name='d'):
 	# Architecture:
 	# 	Add noise
 	# 	Conv3x3, BN, ReLU
@@ -46,28 +46,20 @@ def DiscriminatorBeforeFullyConnectedLayer(X, instance_noise_std, reuse=False, n
 	D_conv1_reshaped = tf.reshape(D_conv1, [config.BATCH_SIZE, -1])
 	minibatch_features = minibatch(D_conv1_reshaped)
 
-	D_bn1 = BatchNormalization(D_conv1, name='conv_bn1')
+	D_bn1 = SpecNorm(D_conv1, update_collection=collections, name='spec1')
 	D_h1 = LeakyReLU(D_bn1)
 
-	D_h1 = tf.nn.dropout(D_h1, 0.6)
-
 	D_conv2 = Conv2d(D_h1, output_dim=64, kernel=(3,3), name='conv2')
-	D_bn2 = BatchNormalization(D_conv2, name='conv_bn2')
+	D_bn2 = SpecNorm(D_conv2, update_collection=collections, name='spec2')
 	D_h2 = LeakyReLU(D_bn2)
 
-	D_h2 = tf.nn.dropout(D_h2, 0.6)
-
 	D_conv3 = Conv2d(D_h2, output_dim=128, kernel=(3,3), name='conv3')
-	D_bn3 = BatchNormalization(D_conv3, name='conv_bn3')
+	D_bn3 = SpecNorm(D_conv3, update_collection=collections, name='spec3')
 	D_h3 = LeakyReLU(D_bn3)
 
-	D_h3 = tf.nn.dropout(D_h3, 0.6)
-
 	D_conv4 = Conv2d(D_h3, output_dim=256, kernel=(3,3), name='conv4')
-	D_bn4 = BatchNormalization(D_conv4, name='conv_bn4')
+	D_bn4 = SpecNorm(D_conv4, update_collection=collections, name='spec4')
 	D_h4 = LeakyReLU(D_bn4)
-
-	D_h4 = tf.nn.dropout(D_h4, 0.6)
 
 	D_r = tf.reshape(D_h4, [config.BATCH_SIZE, 4096])
 	return D_r, D_conv3, minibatch_features
